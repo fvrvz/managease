@@ -29,6 +29,41 @@ while read -r local_ref local_oid remote_ref remote_oid; do
     branch_name="${local_ref#refs/heads/}"
   fi
 
+  # 1. Strictly disallow direct pushes to 'main'
+  if [ "$branch_name" = "main" ]; then
+    echo ""
+    echo "================================================================================"
+    echo "❌ PUSH REJECTED: Direct push to 'main' is forbidden!"
+    echo "================================================================================"
+    echo "Production branch 'main' cannot receive direct pushes."
+    echo "All changes must be merged via Pull Request from 'dev' or 'hotfix/*' branches."
+    echo "================================================================================"
+    echo ""
+    exit 1
+  fi
+
+  # 2. Strictly disallow direct pushes to 'dev'
+  if [ "$branch_name" = "dev" ]; then
+    echo ""
+    echo "================================================================================"
+    echo "❌ PUSH REJECTED: Direct push to 'dev' is forbidden!"
+    echo "================================================================================"
+    echo "Development branch 'dev' cannot receive direct pushes."
+    echo "Please create a feature branch off 'dev' using the naming convention:"
+    echo "  • feature/<ticket-number>-<description>  (e.g. feature/ME-42-user-auth)"
+    echo "  • bugfix/<ticket-number>-<description>   (e.g. bugfix/ME-105-fix-dropdown)"
+    echo "  • hotfix/<ticket-number>-<description>   (e.g. hotfix/ME-999-prod-patch)"
+    echo "  • docs/<ticket-number>-<description>     (e.g. docs/ME-12-api-guide)"
+    echo "  • refactor/<ticket-number>-<description> (e.g. refactor/ME-88-store-cleanup)"
+    echo ""
+    echo "Push your branch and open a Pull Request targeting 'dev'."
+    echo "================================================================================"
+    echo ""
+    exit 1
+  fi
+
+  # 3. Strictly enforce branch naming convention for all other branches
+  PATTERN="^(feature|bugfix|hotfix|docs|refactor)\/([A-Za-z0-9]+-[0-9]+|[0-9]+)-[a-z0-9-]+$"
   if ! [[ "$branch_name" =~ $PATTERN ]]; then
     echo ""
     echo "================================================================================"
@@ -40,7 +75,6 @@ while read -r local_ref local_oid remote_ref remote_oid; do
     echo "  • hotfix/<ticket-number>-<description>   (e.g. hotfix/ME-999-prod-patch)"
     echo "  • docs/<ticket-number>-<description>     (e.g. docs/ME-12-api-guide)"
     echo "  • refactor/<ticket-number>-<description> (e.g. refactor/ME-88-store-cleanup)"
-    echo "  • main, dev"
     echo ""
     echo "Ticket number must be formatted as KEY-123 (e.g. ME-42) or digits (e.g. 42)."
     echo "Description must use lowercase alphanumeric characters and hyphens."
