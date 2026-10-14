@@ -1,0 +1,330 @@
+openapi: 3.0.3
+info:
+  title: ManagEase API
+  version: 1.0.0
+  description: Jira-like Agile Kanban, Sprint Burndown, and Excel Plan Management API
+
+servers:
+  - url: http://localhost:3000
+    description: Local Development Server
+
+paths:
+  /auth/login:
+    post:
+      summary: User Login
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user]
+              properties:
+                user:
+                  type: object
+                  required: [email, password]
+                  properties:
+                    email:
+                      type: string
+                    password:
+                      type: string
+      responses:
+        '200':
+          description: Logged in successfully. Returns JWT in Authorization header.
+        '401':
+          description: Invalid email or password.
+
+  /auth/register:
+    post:
+      summary: User Registration
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user]
+              properties:
+                user:
+                  type: object
+                  required: [email, password, name]
+                  properties:
+                    name:
+                      type: string
+                    email:
+                      type: string
+                    password:
+                      type: string
+      responses:
+        '201':
+          description: User registered successfully.
+
+  /auth/logout:
+    delete:
+      summary: User Logout
+      tags: [Authentication]
+      security:
+        - BearerAuth: []
+      responses:
+        '204':
+          description: Logged out and JWT invalidated.
+
+  /api/v1/me:
+    get:
+      summary: Current Authenticated User Profile
+      tags: [Users]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Current user profile
+
+  /api/v1/projects:
+    get:
+      summary: List Projects
+      tags: [Projects]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of user projects
+    post:
+      summary: Create Project
+      tags: [Projects]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project]
+              properties:
+                project:
+                  type: object
+                  required: [name, key]
+                  properties:
+                    name: { type: string }
+                    key: { type: string, example: "MNG" }
+                    description: { type: string }
+      responses:
+        '201':
+          description: Project created
+
+  /api/v1/projects/{project_id}/sprints:
+    get:
+      summary: List Sprints for Project
+      tags: [Sprints]
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: List of sprints
+    post:
+      summary: Create Sprint
+      tags: [Sprints]
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sprint:
+                  type: object
+                  properties:
+                    name: { type: string }
+                    goal: { type: string }
+                    start_date: { type: string, format: date }
+                    end_date: { type: string, format: date }
+      responses:
+        '201':
+          description: Sprint created
+
+  /api/v1/projects/{project_id}/sprints/{id}/start:
+    post:
+      summary: Start Sprint
+      tags: [Sprints]
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Sprint started
+
+  /api/v1/projects/{project_id}/sprints/{id}/complete:
+    post:
+      summary: Complete Sprint
+      tags: [Sprints]
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Sprint marked as complete
+
+  /api/v1/projects/{project_id}/issues:
+    get:
+      summary: List Issues for Project
+      tags: [Issues]
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: sprint_id
+          in: query
+          schema: { type: integer }
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: priority
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Filtered issues
+    post:
+      summary: Create Issue
+      tags: [Issues]
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                issue:
+                  type: object
+                  required: [title]
+                  properties:
+                    title: { type: string }
+                    description: { type: string }
+                    issue_type: { type: string, enum: [story, bug, task, subtask] }
+                    status: { type: string, enum: [backlog, todo, in_progress, in_review, done] }
+                    priority: { type: string, enum: [lowest, low, medium, high, highest] }
+                    story_points: { type: number }
+                    sprint_id: { type: integer }
+                    epic_id: { type: integer }
+                    assignee_id: { type: integer }
+      responses:
+        '201':
+          description: Issue created
+
+  /api/v1/issues/{id}/move:
+    patch:
+      summary: Move Issue (Status and/or Sprint)
+      tags: [Issues]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status: { type: string }
+                sprint_id: { type: integer }
+      responses:
+        '200':
+          description: Issue status or sprint updated
+
+  /api/v1/issues/{id}/reorder:
+    patch:
+      summary: Reorder Issue Position
+      tags: [Issues]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [position]
+              properties:
+                position: { type: integer }
+      responses:
+        '200':
+          description: Issue position updated
+
+  /api/v1/projects/{project_id}/reports/burndown:
+    get:
+      summary: Get Sprint Burndown Data
+      tags: [Reports]
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: sprint_id
+          in: query
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Ideal vs actual points remaining by day
+
+  /api/v1/projects/{project_id}/imports:
+    post:
+      summary: Upload Excel/CSV Plan to Automatically Setup Issues and Sprints
+      tags: [Imports]
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Import completed successfully
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

@@ -1,0 +1,72 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: managease_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-managease}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-managease_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-managease_development}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-managease}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: managease_backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      RAILS_ENV: ${RAILS_ENV:-development}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-managease}:${POSTGRES_PASSWORD:-managease_secret}@db:5432/${POSTGRES_DB:-managease_development}
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE:-dev_secret_key_base_change_in_prod}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      JWT_SECRET: ${JWT_SECRET:-dev_jwt_secret}
+      JWT_EXPIRY_HOURS: ${JWT_EXPIRY_HOURS:-24}
+      OIDC_ENABLED: ${OIDC_ENABLED:-false}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_ISSUER: ${OIDC_ISSUER:-}
+      OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-http://localhost:3000/auth/oidc/callback}
+    volumes:
+      - ./backend:/app
+      - backend_bundle:/usr/local/bundle
+      - backend_storage:/app/storage
+    ports:
+      - "3000:3000"
+    command: >
+      bash -c "
+        bundle exec rails db:prepare &&
+        bundle exec rails server -b 0.0.0.0 -p 3000
+      "
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: managease_frontend
+    restart: unless-stopped
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:3000}
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    command: pnpm dev --host
+
+volumes:
+  postgres_data:
+  backend_bundle:
+  backend_storage:
+
