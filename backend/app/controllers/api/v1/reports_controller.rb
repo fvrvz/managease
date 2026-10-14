@@ -7,7 +7,11 @@ module Api
 
       # GET /api/v1/projects/:project_id/reports/burndown?sprint_id=X
       def burndown
-        sprint = @project.sprints.find(params[:sprint_id])
+        sprint = params[:sprint_id].present? ? @project.sprints.find(params[:sprint_id]) : (@project.active_sprint || @project.sprints.first)
+        unless sprint
+          return render json: { data: nil, sprint: nil }
+        end
+
         data = BurndownCalculator.new(sprint).call
         render json: { data: data, sprint: SprintSerializer.new(sprint).serializable_hash[:data] }
       end
@@ -48,7 +52,7 @@ module Api
       private
 
       def set_project
-        @project = Project.find(params[:project_id])
+        @project = find_project(params[:project_id]) or raise ActiveRecord::RecordNotFound, 'Project not found'
         authorize @project, :show?
       end
     end

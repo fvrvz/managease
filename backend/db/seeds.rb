@@ -189,3 +189,4 @@ issues_data.each do |data|
 end
 
 puts "== Seeded #{Issue.count} issues across #{Sprint.count} sprints and #{Epic.count} epics =="
+

@@ -7,7 +7,5 @@ class CreateAttachments < ActiveRecord::Migration[8.0]
 
       t.timestamps
     end
-
-    add_index :attachments, :issue_id
   end
 end

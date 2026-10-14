@@ -19,3 +19,4 @@ class IssueLinkSerializer
   belongs_to :target, serializer: IssueSerializer
   belongs_to :created_by, serializer: UserSerializer
 end
+

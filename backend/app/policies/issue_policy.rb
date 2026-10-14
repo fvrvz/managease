@@ -20,3 +20,4 @@ class IssuePolicy < ApplicationPolicy
     role.to_s.in?(%w[owner admin])
   end
 end
+

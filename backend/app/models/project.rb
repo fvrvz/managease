@@ -15,13 +15,12 @@ class Project < ApplicationRecord
   validates :name, presence: true, length: { maximum: 200 }
   validates :key, presence: true,
                   uniqueness: { case_sensitive: false },
-                  format: { with: /\A[A-Z][A-Z0-9]{1,9}\z/, message: 'must be 2-10 uppercase letters/digits, starting with a letter' },
-                  length: { minimum: 2, maximum: 10 }
+                  format: { with: /\A[A-Za-z0-9_\-]{2,10}\z/, message: 'must be 2-10 letters, numbers, hyphens or underscores' }
   validates :description, length: { maximum: 2000 }
 
   # ── Callbacks ─────────────────────────────────────────────────────────────────
   before_validation :upcase_key
-  after_create :add_owner_as_member
+  after_create :setup_defaults
 
   # ── Enums ─────────────────────────────────────────────────────────────────────
   enum :status, { active: 0, archived: 1 }, default: :active
@@ -29,7 +28,11 @@ class Project < ApplicationRecord
   # ── Scopes ────────────────────────────────────────────────────────────────────
   scope :active, -> { where(status: :active) }
   scope :archived, -> { where(status: :archived) }
-  scope :for_user, ->(user) { joins(:project_members).where(project_members: { user_id: user.id }) }
+  scope :for_user, ->(user) {
+    left_outer_joins(:project_members)
+      .where('projects.owner_id = :uid OR project_members.user_id = :uid', uid: user.id)
+      .distinct
+  }
 
   # ── Instance methods ──────────────────────────────────────────────────────────
   def next_issue_number
@@ -37,22 +40,48 @@ class Project < ApplicationRecord
   end
 
   def member?(user)
-    project_members.exists?(user: user)
+    owner_id == user.id || project_members.exists?(user: user)
   end
 
   def role_for(user)
+    return :owner if owner_id == user.id
     project_members.find_by(user: user)&.role
+  end
+
+  def active_sprint
+    sprints.find_by(status: :active)
   end
 
   private
 
   def upcase_key
-    self.key = key&.upcase
+    self.key = key&.to_s&.strip&.upcase
   end
 
-  def add_owner_as_member
+  def setup_defaults
+    # Ensure owner is registered as owner in project_members
     project_members.find_or_create_by(user: owner) do |pm|
       pm.role = :owner
+    end
+
+    # Default agile labels
+    [
+      { name: 'frontend', color: '#3B82F6' },
+      { name: 'backend', color: '#10B981' },
+      { name: 'bug', color: '#EF4444' },
+      { name: 'feature', color: '#8B5CF6' },
+      { name: 'design', color: '#EC4899' },
+      { name: 'devops', color: '#F59E0B' }
+    ].each do |lbl|
+      labels.find_or_create_by(name: lbl[:name]) do |l|
+        l.color = lbl[:color]
+      end
+    end
+
+    # Default initial sprint
+    sprints.find_or_create_by(name: 'Sprint 1') do |s|
+      s.goal = "Initial sprint for #{name}"
+      s.status = :planning
     end
   end
 end

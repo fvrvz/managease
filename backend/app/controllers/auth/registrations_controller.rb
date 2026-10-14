@@ -11,8 +11,13 @@ module Auth
 
     def respond_with(resource, _opts = {})
       if resource.persisted?
+        token = request.env['warden-jwt_auth.token']
         render json: {
-          message: 'Signed up successfully. Please check your email to confirm your account.',
+          message: 'Signed up successfully.',
+          token: token,
+          tokens: {
+            accessToken: token
+          },
           user: UserSerializer.new(resource).serializable_hash[:data]
         }, status: :created
       else

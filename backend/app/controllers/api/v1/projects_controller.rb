@@ -7,7 +7,7 @@ module Api
                                          :add_member, :update_member, :remove_member]
 
       def index
-        projects = policy_scope(Project).for_user(current_user).includes(:owner, :project_members)
+        projects = policy_scope(Project).includes(:owner, :project_members).order(created_at: :desc)
         render_paginated(ProjectSerializer, projects)
       end
 
@@ -99,11 +99,12 @@ module Api
       private
 
       def set_project
-        @project = Project.find(params[:id])
+        @project = find_project(params[:id]) or raise ActiveRecord::RecordNotFound, "Project #{params[:id]} not found"
       end
 
       def project_params
-        params.require(:project).permit(:name, :key, :description, :status)
+        source = params[:project].present? ? params.require(:project) : params
+        source.permit(:name, :key, :description, :status)
       end
     end
   end

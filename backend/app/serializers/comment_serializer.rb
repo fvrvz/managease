@@ -18,3 +18,4 @@ class CommentSerializer
   belongs_to :author, serializer: UserSerializer
   belongs_to :issue, serializer: IssueSerializer
 end
+

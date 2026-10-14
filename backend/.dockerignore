@@ -1,0 +1,7 @@
+.bundle
+log/*
+tmp/*
+storage/*
+.git
+.DS_Store
+

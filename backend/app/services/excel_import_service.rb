@@ -224,3 +224,4 @@ class ExcelImportService
     @errors << "Label assignment failed: #{e.message}"
   end
 end
+

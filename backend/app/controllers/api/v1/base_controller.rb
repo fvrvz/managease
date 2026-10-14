@@ -3,14 +3,28 @@
 module Api
   module V1
     class BaseController < ApplicationController
-      include Pagy::Backend
+      include Pagy::Method
 
       before_action :authenticate_user!
 
+      rescue_from ActiveRecord::RecordNotFound, with: :render_not_found
       rescue_from ActiveRecord::RecordInvalid, with: :render_record_invalid
       rescue_from ActiveRecord::RecordNotDestroyed, with: :render_record_invalid
 
       private
+
+      def render_not_found(exception)
+        render json: { error: exception.message || 'Resource not found' }, status: :not_found
+      end
+
+      def find_project(param)
+        return nil if param.blank?
+        if param.to_s.match?(/\A\d+\z/)
+          Project.find_by(id: param) || Project.find_by(key: param.to_s.upcase)
+        else
+          Project.find_by(key: param.to_s.upcase) || Project.find_by(id: param)
+        end
+      end
 
       def render_record_invalid(exception)
         render json: {
@@ -44,7 +58,7 @@ module Api
         {
           current_page: pagy.page,
           next_page: pagy.next,
-          prev_page: pagy.prev,
+          prev_page: pagy.respond_to?(:prev) ? pagy.prev : pagy.previous,
           total_pages: pagy.pages,
           total_count: pagy.count,
           per_page: pagy.limit

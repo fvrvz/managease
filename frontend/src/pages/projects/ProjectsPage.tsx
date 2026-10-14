@@ -74,8 +74,9 @@ export function ProjectsPage() {
       setKey('');
       setDescription('');
       navigate(`/projects/${newProj.key}/board`);
-    } catch {
-      toast.addToast('Failed to create project', 'error');
+    } catch (err: any) {
+      const msg = err?.response?.data?.details?.join(', ') || err?.response?.data?.error || 'Failed to create project';
+      toast.addToast(msg, 'error');
     } finally {
       setSaving(false);
     }
@@ -232,3 +233,4 @@ export function ProjectsPage() {
   );
 }
 export default ProjectsPage;
+

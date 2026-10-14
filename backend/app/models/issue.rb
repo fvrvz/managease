@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
 class Issue < ApplicationRecord
-  include ActsAsList::Model
-
   acts_as_list scope: [:sprint_id, :status]
 
   # ── Associations ──────────────────────────────────────────────────────────────

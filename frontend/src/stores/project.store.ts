@@ -4,26 +4,32 @@ import { projectsApi, sprintsApi, issuesApi, epicsApi, labelsApi } from '@/api/e
 import type { Project, Sprint, Epic, Issue, Label, IssueStatus } from '@/types';
 
 // Helper to normalize JSONAPI response or plain response
+const normalizeItem = (item: any) => {
+  if (!item) return item;
+  const obj = item.attributes ? { id: item.id, ...item.attributes } : { ...item };
+  if (obj.member_count !== undefined && obj.memberCount === undefined) obj.memberCount = obj.member_count;
+  if (obj.issues_count !== undefined && obj.issueCount === undefined) obj.issueCount = obj.issues_count;
+  if (obj.open_issues_count !== undefined && obj.openIssueCount === undefined) obj.openIssueCount = obj.open_issues_count;
+  if (obj.active_sprint !== undefined && obj.activeSprint === undefined) obj.activeSprint = obj.active_sprint;
+  if (obj.sprint_id !== undefined && obj.sprintId === undefined) obj.sprintId = obj.sprint_id;
+  if (obj.epic_id !== undefined && obj.epicId === undefined) obj.epicId = obj.epic_id;
+  if (obj.assignee_id !== undefined && obj.assigneeId === undefined) obj.assigneeId = obj.assignee_id;
+  if (obj.story_points !== undefined && obj.storyPoints === undefined) obj.storyPoints = obj.story_points;
+  if (obj.issue_type !== undefined && obj.type === undefined) obj.type = obj.issue_type;
+  return obj;
+};
+
 const extractData = <T>(resData: any): T[] => {
-  if (Array.isArray(resData)) return resData;
+  if (Array.isArray(resData)) return resData.map(normalizeItem);
   if (Array.isArray(resData?.data)) {
-    // If it's jsonapi serialized: { id, attributes, ... }
-    return resData.data.map((item: any) => {
-      if (item.attributes) {
-        return { id: item.id, ...item.attributes };
-      }
-      return item;
-    });
+    return resData.data.map(normalizeItem);
   }
   return [];
 };
 
 const extractSingle = <T>(resData: any): T => {
-  if (resData?.data?.attributes) {
-    return { id: resData.data.id, ...resData.data.attributes } as T;
-  }
-  if (resData?.data) return resData.data as T;
-  return resData as T;
+  if (resData?.data) return normalizeItem(resData.data) as T;
+  return normalizeItem(resData) as T;
 };
 
 // ── State ─────────────────────────────────────

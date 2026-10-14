@@ -18,3 +18,4 @@ class EpicPolicy < ApplicationPolicy
     record.project.owner_id == user.id || role.to_s.in?(%w[owner admin])
   end
 end
+

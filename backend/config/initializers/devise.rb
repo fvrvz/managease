@@ -37,8 +37,9 @@ Devise.setup do |config|
   config.unlock_in = 1.hour
 
   # ==> JWT Configuration
+  local_cfg = Rails.application.config.try(:auth)&.dig(:local) || {}
   config.jwt do |jwt|
-    jwt.secret = ENV['JWT_SECRET_KEY'] || ENV['JWT_SECRET'] || Rails.application.secret_key_base
+    jwt.secret = local_cfg[:jwt_secret] || ENV['JWT_SECRET_KEY'] || ENV['JWT_SECRET'] || Rails.application.secret_key_base
     jwt.dispatch_requests = [
       ['POST', %r{^/auth/login$}],
       ['POST', %r{^/auth/register$}]
@@ -46,7 +47,8 @@ Devise.setup do |config|
     jwt.revocation_requests = [
       ['DELETE', %r{^/auth/logout$}]
     ]
-    jwt.expiration_time = 24.hours.to_i
+    expiry_hours = (local_cfg[:jwt_expiry_hours] || ENV['JWT_EXPIRY_HOURS'] || 24).to_i
+    jwt.expiration_time = expiry_hours.hours.to_i
   end
 
   # ==> Navigational formats

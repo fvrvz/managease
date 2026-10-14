@@ -1,4 +1,4 @@
-FROM ruby:3.3.0-slim
+FROM ruby:3.3-slim
 
 # Install system dependencies
 RUN apt-get update -qq && apt-get install -y \
@@ -19,9 +19,6 @@ RUN bundle install --jobs 4 --retry 3
 
 # Copy application code
 COPY . .
-
-# Precompile bootsnap
-RUN bundle exec bootsnap precompile --gemfile app/ lib/
 
 # Expose port
 EXPOSE 3000

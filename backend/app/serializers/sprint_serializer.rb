@@ -28,4 +28,5 @@ class SprintSerializer
   end
 
   belongs_to :project
+  has_many :issues, serializer: IssueSerializer
 end

@@ -35,7 +35,7 @@ class Sprint < ApplicationRecord
 
     transaction do
       if move_incomplete_to
-        incomplete_issues = issues.where.not(status: 'done')
+        incomplete_issues = issues.where.not(status: :done)
         incomplete_issues.update_all(sprint_id: move_incomplete_to.id)
       end
       update!(status: :completed, end_date: end_date || Date.today)
@@ -43,11 +43,11 @@ class Sprint < ApplicationRecord
   end
 
   def story_points_total
-    issues.sum(:story_points)
+    issues.sum(:story_points) || 0
   end
 
   def story_points_completed
-    issues.where(status: 'done').sum(:story_points)
+    issues.done.sum(:story_points) || 0
   end
 
   def story_points_remaining

@@ -56,3 +56,4 @@ class IssueSerializer
   has_many :comments, serializer: proc { CommentSerializer }
   has_many :attachments, serializer: proc { AttachmentSerializer }
 end
+

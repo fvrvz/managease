@@ -17,3 +17,4 @@ class AttachmentSerializer
 
   belongs_to :uploaded_by, serializer: UserSerializer
 end
+

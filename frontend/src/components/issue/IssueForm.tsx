@@ -65,15 +65,19 @@ export function IssueForm(props: IssueFormProps) {
     if (!validate()) return;
     setSaving(true);
     try {
-      const data = {
+      const data: any = {
         title: title().trim(),
         type: type(),
+        issue_type: type(),
         status: status(),
         priority: priority(),
         description: description(),
-        sprintId: sprintId() || undefined,
-        epicId: epicId() || undefined,
-        storyPoints: storyPoints() ? parseInt(storyPoints()) : undefined,
+        sprint_id: sprintId() || null,
+        sprintId: sprintId() || null,
+        epic_id: epicId() || null,
+        epicId: epicId() || null,
+        story_points: storyPoints() ? parseInt(storyPoints()) : null,
+        storyPoints: storyPoints() ? parseInt(storyPoints()) : null,
       };
 
       let saved: Issue;
@@ -86,8 +90,9 @@ export function IssueForm(props: IssueFormProps) {
       toast.addToast(`Issue ${isEdit() ? 'updated' : 'created'} successfully`, 'success');
       props.onSaved?.(saved);
       props.onClose();
-    } catch {
-      toast.addToast(`Failed to ${isEdit() ? 'update' : 'create'} issue`, 'error');
+    } catch (err: any) {
+      const msg = err?.response?.data?.details?.join(', ') || err?.response?.data?.error || `Failed to ${isEdit() ? 'update' : 'create'} issue`;
+      toast.addToast(msg, 'error');
     } finally {
       setSaving(false);
     }

@@ -65,7 +65,7 @@ module Api
       private
 
       def set_project
-        @project = Project.find(params[:project_id])
+        @project = find_project(params[:project_id]) or raise ActiveRecord::RecordNotFound, 'Project not found'
         authorize @project, :show?
       end
 

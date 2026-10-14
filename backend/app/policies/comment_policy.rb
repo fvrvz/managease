@@ -13,3 +13,4 @@ class CommentPolicy < ApplicationPolicy
     record.author_id == user.id || record.issue.project.owner_id == user.id
   end
 end
+

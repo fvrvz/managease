@@ -14,3 +14,4 @@ class LabelPolicy < ApplicationPolicy
     update?
   end
 end
+

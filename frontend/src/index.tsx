@@ -9,3 +9,4 @@ if (!root) {
 }
 
 render(() => <App />, root);
+

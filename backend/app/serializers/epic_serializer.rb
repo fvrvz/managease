@@ -30,3 +30,4 @@ class EpicSerializer
   belongs_to :project, serializer: ProjectSerializer
   has_many :issues, serializer: IssueSerializer
 end
+

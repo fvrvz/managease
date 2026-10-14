@@ -91,7 +91,7 @@ module Api
       private
 
       def set_project
-        @project = Project.find(params[:project_id])
+        @project = find_project(params[:project_id] || params[:project_key]) or raise ActiveRecord::RecordNotFound, 'Project not found'
         authorize @project, :show?
       end
 
@@ -100,11 +100,22 @@ module Api
       end
 
       def issue_params
-        params.require(:issue).permit(
-          :title, :description, :issue_type, :status, :priority,
-          :story_points, :due_date, :sprint_id, :epic_id, :assignee_id, :parent_id,
+        source = params[:issue].present? ? params.require(:issue) : params
+        p = source.permit(
+          :title, :description, :issue_type, :type, :status, :priority,
+          :story_points, :storyPoints, :due_date, :dueDate,
+          :sprint_id, :sprintId, :epic_id, :epicId,
+          :assignee_id, :assigneeId, :parent_id, :parentId,
           label_ids: []
         )
+        p[:issue_type] = p.delete(:type) if p.key?(:type) && p[:issue_type].blank?
+        p[:story_points] = p.delete(:storyPoints) if p.key?(:storyPoints) && p[:story_points].blank?
+        p[:due_date] = p.delete(:dueDate) if p.key?(:dueDate) && p[:due_date].blank?
+        p[:sprint_id] = p.delete(:sprintId) if p.key?(:sprintId) && p[:sprint_id].blank?
+        p[:epic_id] = p.delete(:epicId) if p.key?(:epicId) && p[:epic_id].blank?
+        p[:assignee_id] = p.delete(:assigneeId) if p.key?(:assigneeId) && p[:assignee_id].blank?
+        p[:parent_id] = p.delete(:parentId) if p.key?(:parentId) && p[:parent_id].blank?
+        p
       end
 
       def filter(scope)

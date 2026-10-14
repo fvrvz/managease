@@ -1,20 +1,23 @@
 # frozen_string_literal: true
 
 class User < ApplicationRecord
-  include Devise::JWT::RevocationStrategies::Denylist
+  oidc_cfg = Rails.application.config.try(:auth)&.dig(:oidc) || {}
+  oidc_enabled = oidc_cfg[:enabled] == true || ENV['OIDC_ENABLED'] == 'true'
 
-  devise :database_authenticatable,
-         :registerable,
-         :recoverable,
-         :rememberable,
-         :validatable,
-         :confirmable,
-         :lockable,
-         :trackable,
-         :omniauthable,
-         :jwt_authenticatable,
-         jwt_revocation_strategy: self,
-         omniauth_providers: [:openid_connect]
+  devise_modules = [
+    :database_authenticatable,
+    :registerable,
+    :recoverable,
+    :rememberable,
+    :validatable,
+    :jwt_authenticatable
+  ]
+  if oidc_enabled
+    devise_modules << :omniauthable
+    devise *devise_modules, jwt_revocation_strategy: JwtDenylist, omniauth_providers: [:openid_connect]
+  else
+    devise *devise_modules, jwt_revocation_strategy: JwtDenylist
+  end
 
   # ── Associations ──────────────────────────────────────────────────────────────
   has_many :project_members, dependent: :destroy

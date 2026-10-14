@@ -57,3 +57,4 @@ export function BoardPage() {
   );
 }
 export default BoardPage;
+

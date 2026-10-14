@@ -43,8 +43,9 @@ export const login = async (email: string, password: string): Promise<void> => {
       role: 'admin',
       createdAt: new Date().toISOString(),
     };
-    if (data.tokens?.accessToken) {
-      setToken(data.tokens.accessToken);
+    const t = data.token || data.tokens?.accessToken;
+    if (t) {
+      setToken(t);
     }
     setUser(u);
     persistUser(u);
@@ -72,8 +73,9 @@ export const register = async (name: string, email: string, password: string): P
       role: 'admin',
       createdAt: new Date().toISOString(),
     };
-    if (data.tokens?.accessToken) {
-      setToken(data.tokens.accessToken);
+    const t = data.token || data.tokens?.accessToken;
+    if (t) {
+      setToken(t);
     }
     setUser(u);
     persistUser(u);

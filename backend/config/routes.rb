@@ -2,7 +2,16 @@ Rails.application.routes.draw do
   # Health check
   get '/health', to: proc { [200, {}, [{ status: 'ok' }.to_json]] }
 
-  # Devise Auth routes
+  oidc_cfg = Rails.application.config.try(:auth)&.dig(:oidc) || {}
+  oidc_enabled = oidc_cfg[:enabled] == true || ENV['OIDC_ENABLED'] == 'true'
+
+  auth_controllers = {
+    sessions: 'auth/sessions',
+    registrations: 'auth/registrations',
+    confirmations: 'auth/confirmations'
+  }
+  auth_controllers[:omniauth_callbacks] = 'auth/omniauth_callbacks' if oidc_enabled
+
   devise_for :users,
     path: 'auth',
     path_names: {
@@ -10,12 +19,7 @@ Rails.application.routes.draw do
       sign_out: 'logout',
       registration: 'register'
     },
-    controllers: {
-      sessions: 'auth/sessions',
-      registrations: 'auth/registrations',
-      omniauth_callbacks: 'auth/omniauth_callbacks',
-      confirmations: 'auth/confirmations'
-    }
+    controllers: auth_controllers
 
   # OIDC Callback
   get '/auth/oidc/callback', to: 'auth/omniauth_callbacks#openid_connect'

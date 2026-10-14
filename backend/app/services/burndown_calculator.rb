@@ -49,3 +49,4 @@ class BurndownCalculator
     days_data
   end
 end
+

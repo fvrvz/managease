@@ -13,7 +13,7 @@ class Attachment < ApplicationRecord
                    size: { less_than: 50.megabytes, message: 'must be less than 50MB' },
                    content_type: {
                      in: [
-                       'image/png', 'image/jpg', 'image/jpeg', 'image/gif', 'image/webp',
+                       'image/png', 'image/jpeg', 'image/gif', 'image/webp',
                        'application/pdf',
                        'application/vnd.ms-excel',
                        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

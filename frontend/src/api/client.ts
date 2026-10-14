@@ -41,9 +41,14 @@ apiClient.interceptors.request.use(
 // ── Response interceptor: handle 401 and capture JWT from headers if present ──
 apiClient.interceptors.response.use(
   (response) => {
-    // Devise-jwt returns Authorization header on login/register
-    const authHeader = response.headers['authorization'];
-    if (authHeader && authHeader.startsWith('Bearer ')) {
+    // 1. Capture token from JSON response body
+    const bodyToken = (response.data as any)?.token || (response.data as any)?.tokens?.accessToken;
+    if (bodyToken) {
+      setToken(bodyToken);
+    }
+    // 2. Devise-jwt returns Authorization header on login/register
+    const authHeader = response.headers?.['authorization'] || response.headers?.get?.('authorization');
+    if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
       const token = authHeader.substring(7);
       setToken(token);
     }

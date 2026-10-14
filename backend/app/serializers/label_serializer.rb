@@ -15,3 +15,4 @@ class LabelSerializer
     label.issues.size
   end
 end
+

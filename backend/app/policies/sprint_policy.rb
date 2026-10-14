@@ -26,3 +26,4 @@ class SprintPolicy < ApplicationPolicy
     update?
   end
 end
+

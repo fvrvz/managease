@@ -1,0 +1,44 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# ManagEase Authentication Configuration (Runtime Config)
+# ─────────────────────────────────────────────────────────────────────────────
+# You can change these settings here directly without rebuilding Docker containers.
+# Values here override or fall back to .env environment variables.
+
+default: &default
+  # ── Local Authentication (Devise + JWT) ───────────────────────────────────
+  local:
+    enabled: true
+    jwt_secret: <%= ENV['JWT_SECRET'] || 'managease_jwt_super_secret_dev_key_2026' %>
+    jwt_expiry_hours: <%= (ENV['JWT_EXPIRY_HOURS'] || 24).to_i %>
+    password_min_length: 6
+
+  # ── External OIDC / OAuth2 SSO (Google, Keycloak, Auth0, Okta, etc.) ──────
+  # When enabled is false, ManagEase uses standard local email/password login.
+  # When set to true, the "Sign in with SSO" button appears on the login page.
+  oidc:
+    enabled: <%= ENV['OIDC_ENABLED'] == 'true' %>
+    provider_name: "openid_connect"
+    client_id: <%= ENV.fetch('OIDC_CLIENT_ID', '') %>
+    client_secret: <%= ENV.fetch('OIDC_CLIENT_SECRET', '') %>
+    issuer: <%= ENV.fetch('OIDC_ISSUER', 'https://accounts.google.com') %>
+    redirect_uri: <%= ENV.fetch('OIDC_REDIRECT_URI', 'http://localhost:3000/auth/oidc/callback') %>
+    scopes:
+      - openid
+      - email
+      - profile
+
+    # Common Issuer Examples:
+    # Google:    https://accounts.google.com
+    # Keycloak:  http://<keycloak-host>:8080/realms/<realm-name>
+    # Auth0:     https://<your-tenant>.auth0.com
+    # Okta:      https://<your-org>.okta.com/oauth2/default
+
+development:
+  <<: *default
+
+test:
+  <<: *default
+
+production:
+  <<: *default
+
