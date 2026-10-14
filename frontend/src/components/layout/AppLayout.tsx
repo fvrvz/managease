@@ -31,7 +31,7 @@ export const AppLayout = (props: { children?: JSX.Element }) => {
             collapsed() ? 'ml-16' : 'ml-64'
           }`}
         >
-          <div class="max-w-7xl mx-auto">
+          <div class="w-full">
             {props.children}
           </div>
         </main>

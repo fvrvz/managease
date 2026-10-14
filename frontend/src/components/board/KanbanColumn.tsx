@@ -45,7 +45,7 @@ export function KanbanColumn(props: KanbanColumnProps) {
   };
 
   return (
-    <div class="flex flex-col w-72 flex-shrink-0">
+    <div class="flex flex-col flex-1 min-w-[220px] max-w-sm">
       {/* Column header */}
       <div class="flex items-center gap-2 mb-3 px-1">
         <span class="w-2.5 h-2.5 rounded-full flex-shrink-0 shadow-sm" style={{ 'background-color': props.color }} />

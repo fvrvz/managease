@@ -39,7 +39,7 @@ export function CardSkeleton() {
 
 export function ColumnSkeleton() {
   return (
-    <div class="bg-slate-100 rounded-xl p-3 w-64 flex flex-col gap-2">
+    <div class="bg-slate-100 rounded-xl p-3 flex-1 min-w-[220px] max-w-sm flex flex-col gap-2">
       <Skeleton height="1.25rem" width="50%" />
       <CardSkeleton />
       <CardSkeleton />
