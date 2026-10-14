@@ -12,6 +12,7 @@ import { ReportsPage } from '@/pages/reports/ReportsPage';
 import { ImportPage } from '@/pages/settings/ImportPage';
 import { WorkflowPage } from '@/pages/workflow/WorkflowPage';
 import { SettingsPage } from '@/pages/settings/SettingsPage';
+import { UserManagementPage } from '@/pages/users/UserManagementPage';
 
 export function App() {
   return (
@@ -32,6 +33,7 @@ export function App() {
         <Route path="projects/:projectKey/roadmap" component={RoadmapPage} />
         <Route path="projects/:projectKey/workflow" component={WorkflowPage} />
         <Route path="projects/:projectKey/reports" component={ReportsPage} />
+        <Route path="projects/:projectKey/users" component={UserManagementPage} />
         <Route path="projects/:projectKey/import" component={ImportPage} />
         <Route path="projects/:projectKey/settings" component={SettingsPage} />
       </Route>

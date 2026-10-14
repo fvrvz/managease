@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_10_14_172355) do
+ActiveRecord::Schema[8.1].define(version: 2026_10_14_190000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -121,6 +121,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_14_172355) do
     t.datetime "resolved_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.date "start_date"
+    t.decimal "estimated_hours", precision: 6, scale: 2
+    t.decimal "logged_hours", precision: 6, scale: 2, default: "0.0"
     t.index ["assignee_id"], name: "index_issues_on_assignee_id"
     t.index ["epic_id"], name: "index_issues_on_epic_id"
     t.index ["parent_id"], name: "index_issues_on_parent_id"
@@ -172,6 +175,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_14_172355) do
     t.bigint "owner_id", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "github_repo"
+    t.string "github_webhook_secret"
+    t.string "github_token"
+    t.jsonb "workflow_statuses", default: []
     t.index ["key"], name: "index_projects_on_key", unique: true
     t.index ["owner_id"], name: "index_projects_on_owner_id"
     t.index ["status"], name: "index_projects_on_status"
@@ -221,6 +228,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_14_172355) do
     t.index ["unlock_token"], name: "index_users_on_unlock_token", unique: true
   end
 
+  create_table "work_logs", force: :cascade do |t|
+    t.bigint "issue_id", null: false
+    t.bigint "user_id", null: false
+    t.decimal "hours", precision: 6, scale: 2, null: false
+    t.date "logged_date", null: false
+    t.text "description"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["issue_id", "logged_date"], name: "index_work_logs_on_issue_id_and_logged_date"
+    t.index ["issue_id"], name: "index_work_logs_on_issue_id"
+    t.index ["user_id", "logged_date"], name: "index_work_logs_on_user_id_and_logged_date"
+    t.index ["user_id"], name: "index_work_logs_on_user_id"
+  end
+
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "attachments", "issues"
@@ -245,4 +266,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_10_14_172355) do
   add_foreign_key "project_members", "users"
   add_foreign_key "projects", "users", column: "owner_id"
   add_foreign_key "sprints", "projects"
+  add_foreign_key "work_logs", "issues"
+  add_foreign_key "work_logs", "users"
 end

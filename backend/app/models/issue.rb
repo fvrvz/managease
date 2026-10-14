@@ -1,7 +1,17 @@
 # frozen_string_literal: true
 
 class Issue < ApplicationRecord
+  self.inheritance_column = nil # Disable Rails STI so 'type' is not reserved
+
   acts_as_list scope: [:sprint_id, :status]
+
+  def type=(val)
+    self.issue_type = val
+  end
+
+  def type
+    issue_type
+  end
 
   # ── Associations ──────────────────────────────────────────────────────────────
   belongs_to :project

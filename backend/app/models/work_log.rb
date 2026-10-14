@@ -19,3 +19,4 @@ class WorkLog < ApplicationRecord
     issue.update_column(:logged_hours, total)
   end
 end
+

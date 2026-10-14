@@ -28,6 +28,7 @@ import {
   fetchProjectMembers,
   currentProject,
   projects,
+  fetchProjects,
 } from '@/stores/project.store';
 import type { Issue, IssueType, IssueStatus, IssuePriority } from '@/types';
 
@@ -132,6 +133,9 @@ export function IssueForm(props: IssueFormProps) {
 
   createEffect(() => {
     if (props.open) {
+      if (projects.length === 0) {
+        fetchProjects();
+      }
       const pid = targetProjectId();
       if (pid) fetchProjectMembers(pid);
 
@@ -181,7 +185,6 @@ export function IssueForm(props: IssueFormProps) {
     try {
       const data: any = {
         title: title().trim(),
-        type: type(),
         issue_type: type(),
         status: status() || 'todo',
         priority: priority(),
@@ -399,3 +402,4 @@ export function IssueForm(props: IssueFormProps) {
     </Modal>
   );
 }
+

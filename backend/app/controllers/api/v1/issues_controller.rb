@@ -157,16 +157,34 @@ module Api
           :sprint_id, :sprintId, :epic_id, :epicId,
           :assignee_id, :assigneeId, :parent_id, :parentId,
           label_ids: []
-        )
-        p[:issue_type] = p.delete(:type) if p.key?(:type) && p[:issue_type].blank?
-        p[:story_points] = p.delete(:storyPoints) if p.key?(:storyPoints) && p[:story_points].blank?
-        p[:due_date] = p.delete(:dueDate) if p.key?(:dueDate) && p[:due_date].blank?
-        p[:start_date] = p.delete(:startDate) if p.key?(:startDate) && p[:start_date].blank?
-        p[:estimated_hours] = p.delete(:estimatedHours) if p.key?(:estimatedHours) && p[:estimated_hours].blank?
-        p[:sprint_id] = p.delete(:sprintId) if p.key?(:sprintId) && p[:sprint_id].blank?
-        p[:epic_id] = p.delete(:epicId) if p.key?(:epicId) && p[:epic_id].blank?
-        p[:assignee_id] = p.delete(:assigneeId) if p.key?(:assigneeId) && p[:assignee_id].blank?
-        p[:parent_id] = p.delete(:parentId) if p.key?(:parentId) && p[:parent_id].blank?
+        ).to_h.with_indifferent_access
+
+        type_val = p.delete(:type)
+        p[:issue_type] = type_val if p[:issue_type].blank? && type_val.present?
+
+        sp_val = p.delete(:storyPoints)
+        p[:story_points] = sp_val if p[:story_points].blank? && sp_val.present?
+
+        dd_val = p.delete(:dueDate)
+        p[:due_date] = dd_val if p[:due_date].blank? && dd_val.present?
+
+        sd_val = p.delete(:startDate)
+        p[:start_date] = sd_val if p[:start_date].blank? && sd_val.present?
+
+        eh_val = p.delete(:estimatedHours)
+        p[:estimated_hours] = eh_val if p[:estimated_hours].blank? && eh_val.present?
+
+        sprint_val = p.delete(:sprintId)
+        p[:sprint_id] = sprint_val if p[:sprint_id].blank? && sprint_val.present?
+
+        epic_val = p.delete(:epicId)
+        p[:epic_id] = epic_val if p[:epic_id].blank? && epic_val.present?
+
+        assignee_val = p.delete(:assigneeId)
+        p[:assignee_id] = assignee_val if p[:assignee_id].blank? && assignee_val.present?
+
+        parent_val = p.delete(:parentId)
+        p[:parent_id] = parent_val if p[:parent_id].blank? && parent_val.present?
 
         # Blank to nil conversion for optional fields
         %i[sprint_id epic_id assignee_id parent_id start_date due_date estimated_hours story_points].each do |k|

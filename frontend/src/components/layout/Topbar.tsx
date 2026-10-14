@@ -1,6 +1,6 @@
 import { createSignal, Show, For } from 'solid-js';
 import { A, useLocation, useParams } from '@solidjs/router';
-import { Search, Bell, LogOut, Plus, ExternalLink, GitBranch } from 'lucide-solid';
+import { Search, Bell, LogOut, Plus, ExternalLink, GitBranch, Users, Settings } from 'lucide-solid';
 import { user, logout } from '@/stores/auth.store';
 import { currentProject, globalSearchQuery, setGlobalSearchQuery, issues } from '@/stores/project.store';
 import { useClickOutside } from '@/hooks/useClickOutside';
@@ -167,6 +167,23 @@ export const Topbar = (props: TopbarProps) => {
               <div class="px-4 py-2 border-b border-slate-100">
                 <div class="text-xs font-semibold text-slate-800 truncate">{user()?.name || 'User'}</div>
                 <div class="text-[11px] text-slate-500 truncate">{user()?.email || 'user@managease.local'}</div>
+              </div>
+
+              <div class="py-1 border-b border-slate-100">
+                <A
+                  href={`/projects/${params.projectKey || currentProject()?.key || 'DEV'}/users`}
+                  class="flex items-center gap-2 px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
+                >
+                  <Users class="w-3.5 h-3.5 text-slate-400" />
+                  <span>User Management</span>
+                </A>
+                <A
+                  href={`/projects/${params.projectKey || currentProject()?.key || 'DEV'}/settings`}
+                  class="flex items-center gap-2 px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
+                >
+                  <Settings class="w-3.5 h-3.5 text-slate-400" />
+                  <span>Settings & GitHub</span>
+                </A>
               </div>
 
               <div class="py-1">
