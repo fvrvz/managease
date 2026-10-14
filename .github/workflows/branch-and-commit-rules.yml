@@ -11,24 +11,42 @@ jobs:
     steps:
       - name: Check Branch Naming Convention
         run: |
-          REF_NAME="${{ github.head_ref || github.ref_name }}"
-          echo "Evaluating branch: $REF_NAME"
+          EVENT="${{ github.event_name }}"
+          BASE="${{ github.base_ref }}"
+          HEAD="${{ github.head_ref }}"
+          REF="${{ github.ref_name }}"
 
-          PATTERN="^(main|dev|(feature|bugfix|hotfix|docs|refactor)\/([A-Za-z0-9]+-[0-9]+|[0-9]+)-[a-z0-9-]+)$"
+          echo "Event: $EVENT, Base: $BASE, Head: $HEAD, Ref: $REF"
 
-          if [[ "$REF_NAME" =~ $PATTERN ]]; then
-            echo "✅ Branch '$REF_NAME' matches the convention."
-            exit 0
+          NAMING_PATTERN="^(feature|bugfix|hotfix|docs|refactor)\/([A-Za-z0-9]+-[0-9]+|[0-9]+)-[a-z0-9-]+$"
+
+          if [ "$EVENT" = "pull_request" ]; then
+            if [ "$BASE" = "main" ]; then
+              # Main branch accepts dev or hotfix/* (handled by main-merge-gate.yml as well)
+              if [ "$HEAD" = "dev" ] || [[ "$HEAD" =~ ^hotfix\/ ]]; then
+                echo "✅ PR to main from '$HEAD' is valid."
+                exit 0
+              fi
+            fi
+
+            # All PRs to dev must originate from properly named branches
+            if [[ "$HEAD" =~ $NAMING_PATTERN ]]; then
+              echo "✅ PR branch '$HEAD' matches naming convention."
+              exit 0
+            else
+              echo "::error::PR branch '$HEAD' violates branch naming convention."
+              echo "PR branches targeting '$BASE' must match: feature/, bugfix/, hotfix/, docs/, or refactor/<ticket>-<description>"
+              exit 1
+            fi
           else
-            echo "::error::Branch '$REF_NAME' violates the branch naming convention."
-            echo "Allowed formats:"
-            echo "  • feature/<ticket-number>-<description>"
-            echo "  • bugfix/<ticket-number>-<description>"
-            echo "  • hotfix/<ticket-number>-<description>"
-            echo "  • docs/<ticket-number>-<description>"
-            echo "  • refactor/<ticket-number>-<description>"
-            echo "  • main, dev"
-            exit 1
+            # Push events
+            if [[ "$REF" =~ $NAMING_PATTERN ]] || [ "$REF" = "dev" ] || [ "$REF" = "main" ]; then
+              echo "✅ Branch '$REF' is valid."
+              exit 0
+            else
+              echo "::error::Branch '$REF' violates naming convention."
+              exit 1
+            fi
           fi
 
   validate-commit-messages:
