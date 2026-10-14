@@ -63,3 +63,4 @@ class IssueMailer < ApplicationMailer
     "#{frontend_base}/projects/#{issue.project.key}?issue=#{issue.id}"
   end
 end
+

@@ -22,3 +22,4 @@ Rails.application.configure do
     config.action_mailer.delivery_method = Rails.env.production? ? :smtp : :test
   end
 end
+

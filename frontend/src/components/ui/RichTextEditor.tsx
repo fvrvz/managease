@@ -1,5 +1,4 @@
 import { createSignal, createMemo, Show } from 'solid-js';
-import { marked } from 'marked';
 import {
   Bold,
   Italic,
@@ -21,14 +20,163 @@ import {
 } from 'lucide-solid';
 import clsx from 'clsx';
 
-// Configure marked options
-marked.setOptions({
-  gfm: true,
-  breaks: true,
-});
+/**
+ * Robust zero-dependency Markdown to HTML parser
+ */
+export function parseMarkdown(md: string): string {
+  if (!md) return '';
+
+  // 1. Preserve multi-line code blocks
+  const codeBlocks: string[] = [];
+  let html = md.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (_, lang, code) => {
+    const placeholder = `\x00CODE${codeBlocks.length}\x00`;
+    const escaped = code
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    codeBlocks.push(
+      `<pre><code class="${lang ? 'language-' + lang : ''}">${escaped}</code></pre>`
+    );
+    return placeholder;
+  });
+
+  // 2. Preserve inline code
+  const inlineCodes: string[] = [];
+  html = html.replace(/`([^`\n]+)`/g, (_, code) => {
+    const placeholder = `\x00INLINE${inlineCodes.length}\x00`;
+    const escaped = code
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    inlineCodes.push(`<code>${escaped}</code>`);
+    return placeholder;
+  });
+
+  // 3. Tables
+  html = html.replace(
+    /((?:^|\n)\|[^\n]+\|\n\|(?:\s*:?-+:?\s*\|)+\n(?:\|[^\n]+\|\n?)+)/g,
+    (tableMatch) => {
+      const rows = tableMatch
+        .trim()
+        .split('\n')
+        .map((r) => r.trim());
+      if (rows.length < 2) return tableMatch;
+
+      const headers = rows[0]
+        .slice(1, -1)
+        .split('|')
+        .map((c) => c.trim());
+      const bodyRows = rows.slice(2);
+
+      let tableHtml = '<table><thead><tr>';
+      headers.forEach((h) => {
+        tableHtml += `<th>${h}</th>`;
+      });
+      tableHtml += '</tr></thead><tbody>';
+
+      bodyRows.forEach((r) => {
+        const cells = r
+          .slice(1, -1)
+          .split('|')
+          .map((c) => c.trim());
+        tableHtml += '<tr>';
+        cells.forEach((c) => {
+          tableHtml += `<td>${c}</td>`;
+        });
+        tableHtml += '</tr>';
+      });
+
+      tableHtml += '</tbody></table>';
+      return `\n${tableHtml}\n`;
+    }
+  );
+
+  // 4. Blockquotes
+  html = html.replace(/(?:^> ?[^\n]*(?:\n> ?[^\n]*)*)/gm, (quoteMatch) => {
+    const lines = quoteMatch
+      .split('\n')
+      .map((l) => l.replace(/^> ?/, ''))
+      .join('<br />');
+    return `<blockquote>${lines}</blockquote>`;
+  });
+
+  // 5. Headings
+  html = html.replace(/^#### (.*$)/gm, '<h4>$1</h4>');
+  html = html.replace(/^### (.*$)/gm, '<h3>$1</h3>');
+  html = html.replace(/^## (.*$)/gm, '<h2>$1</h2>');
+  html = html.replace(/^# (.*$)/gm, '<h1>$1</h1>');
+
+  // 6. Horizontal Rules
+  html = html.replace(/^(?:---|\*\*\*|___)\s*$/gm, '<hr />');
+
+  // 7. Checklists
+  html = html.replace(
+    /^- \[(x|X)\] (.*)$/gm,
+    '<li class="checklist-item"><input type="checkbox" checked disabled /> $2</li>'
+  );
+  html = html.replace(
+    /^- \[ \] (.*)$/gm,
+    '<li class="checklist-item"><input type="checkbox" disabled /> $1</li>'
+  );
+
+  // 8. Lists
+  html = html.replace(/^[*-] (.*)$/gm, '<li>$1</li>');
+  html = html.replace(/^\d+\. (.*)$/gm, '<li class="num-item">$1</li>');
+
+  // Wrap lists
+  html = html.replace(
+    /((?:<li class="checklist-item">.*?<\/li>\s*)+)/gs,
+    '<ul class="checklist">$1</ul>'
+  );
+  html = html.replace(
+    /((?:<li class="num-item">.*?<\/li>\s*)+)/gs,
+    (m) => `<ol>${m.replace(/class="num-item"/g, '')}</ol>`
+  );
+  html = html.replace(
+    /((?:<li>.*?<\/li>\s*)+)/gs,
+    '<ul>$1</ul>'
+  );
+
+  // 9. Links & Images
+  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" />');
+  html = html.replace(
+    /\[([^\]]+)\]\(([^)]+)\)/g,
+    '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'
+  );
+
+  // 10. Inline text styles
+  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+  html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+  html = html.replace(/_([^_]+)_/g, '<em>$1</em>');
+  html = html.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+
+  // 11. Paragraphs (split by double newlines)
+  const blocks = html.split(/\n{2,}/);
+  html = blocks
+    .map((block) => {
+      const trimmed = block.trim();
+      if (!trimmed) return '';
+      if (/^<(h[1-6]|ul|ol|table|blockquote|\x00CODE|hr)/i.test(trimmed)) {
+        return trimmed;
+      }
+      return `<p>${trimmed.replace(/\n/g, '<br />')}</p>`;
+    })
+    .join('\n');
+
+  // 12. Restore code blocks & inline code
+  inlineCodes.forEach((code, i) => {
+    html = html.split(`\x00INLINE${i}\x00`).join(code);
+  });
+  codeBlocks.forEach((code, i) => {
+    html = html.split(`\x00CODE${i}\x00`).join(code);
+  });
+
+  return html;
+}
 
 export interface MarkdownViewerProps {
-  content: string;
+  content?: string;
   class?: string;
   emptyPlaceholder?: string;
 }
@@ -36,11 +184,7 @@ export interface MarkdownViewerProps {
 export function MarkdownViewer(props: MarkdownViewerProps) {
   const htmlContent = createMemo(() => {
     if (!props.content?.trim()) return '';
-    try {
-      return marked.parse(props.content) as string;
-    } catch {
-      return props.content;
-    }
+    return parseMarkdown(props.content);
   });
 
   return (
@@ -89,7 +233,7 @@ export function RichTextEditor(props: RichTextEditorProps) {
     const selectedText = currentVal.substring(start, end) || defaultText;
 
     let replacement = '';
-    let newCursorPos = start + prefix.length;
+    const newCursorPos = start + prefix.length;
 
     if (prefix.startsWith('#') || prefix.startsWith('> ') || prefix.startsWith('- ') || prefix.startsWith('1. ')) {
       // Line-based formatting
@@ -119,7 +263,6 @@ export function RichTextEditor(props: RichTextEditorProps) {
       if (!textareaRef) return;
       textareaRef.focus();
       if (start === end) {
-        // Position inside formatting
         textareaRef.setSelectionRange(newCursorPos, newCursorPos + selectedText.length);
       } else {
         textareaRef.setSelectionRange(

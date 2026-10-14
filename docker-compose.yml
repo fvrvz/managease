@@ -66,7 +66,7 @@ services:
       - /app/node_modules
     ports:
       - "5173:5173"
-    command: pnpm dev --host
+    command: sh -c "pnpm install && pnpm dev --host"
 
 volumes:
   postgres_data:
