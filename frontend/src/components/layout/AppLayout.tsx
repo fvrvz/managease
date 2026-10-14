@@ -2,7 +2,7 @@ import { createSignal, JSX, Show } from 'solid-js';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import { IssueForm } from '@/components/issue/IssueForm';
-import { currentProject } from '@/stores/project.store';
+import { currentProject, projects } from '@/stores/project.store';
 import { ToastProvider } from '@/components/ui/Toast';
 
 export const AppLayout = (props: { children?: JSX.Element }) => {
@@ -41,7 +41,7 @@ export const AppLayout = (props: { children?: JSX.Element }) => {
           <IssueForm
             open={createIssueOpen()}
             onClose={() => setCreateIssueOpen(false)}
-            projectId={currentProject()?.id || '1'}
+            projectId={currentProject()?.id || (projects.length > 0 ? projects[0].id : undefined)}
           />
         </Show>
       </div>

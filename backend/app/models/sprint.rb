@@ -23,11 +23,13 @@ class Sprint < ApplicationRecord
   scope :ordered, -> { order(start_date: :asc, created_at: :asc) }
 
   # ── Instance methods ──────────────────────────────────────────────────────────
-  def start!
+  def start!(s_date: nil, e_date: nil)
     raise 'Sprint already active or completed' unless planning?
-    raise 'Another sprint is already active' if project.sprints.active.exists?
+    raise 'Another sprint is already active' if project.sprints.active.where.not(id: id).exists?
 
-    update!(status: :active, start_date: start_date || Date.today)
+    final_start = s_date || start_date || Date.today
+    final_end = e_date || end_date || (final_start + 14.days)
+    update!(status: :active, start_date: final_start, end_date: final_end)
   end
 
   def complete!(move_incomplete_to: nil)

@@ -49,6 +49,56 @@ module Api
         render json: { data: summary }
       end
 
+      # GET /api/v1/projects/:project_id/reports/time_tracking
+      def time_tracking
+        issues = @project.issues.includes(:assignee, :work_logs)
+        sprint_id = params[:sprint_id]
+        issues = issues.where(sprint_id: sprint_id) if sprint_id.present?
+
+        user_logs = Hash.new(0.0)
+        daily_logs = Hash.new(0.0)
+        issue_rows = []
+
+        total_estimated = 0.0
+        total_logged = 0.0
+
+        issues.each do |issue|
+          est = issue.try(:estimated_hours).to_f
+          logged = issue.try(:logged_hours).to_f
+          total_estimated += est
+          total_logged += logged
+
+          issue_rows << {
+            id: issue.id,
+            key: issue.issue_key,
+            title: issue.title,
+            status: issue.status,
+            assignee: issue.assignee ? { id: issue.assignee.id, name: issue.assignee.name } : nil,
+            estimated_hours: est,
+            logged_hours: logged,
+            remaining_hours: [est - logged, 0.0].max
+          }
+
+          if issue.respond_to?(:work_logs)
+            issue.work_logs.each do |wl|
+              user_name = wl.user&.name || 'Unknown'
+              user_logs[user_name] += wl.hours.to_f
+              daily_logs[wl.logged_date.to_s] += wl.hours.to_f
+            end
+          end
+        end
+
+        render json: {
+          data: {
+            total_estimated: total_estimated.round(2),
+            total_logged: total_logged.round(2),
+            by_user: user_logs.map { |user, hours| { user: user, hours: hours.round(2) } },
+            by_date: daily_logs.map { |date, hours| { date: date, hours: hours.round(2) } }.sort_by { |d| d[:date] },
+            issues: issue_rows
+          }
+        }
+      end
+
       private
 
       def set_project

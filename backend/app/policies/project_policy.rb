@@ -28,6 +28,8 @@ class ProjectPolicy < ApplicationPolicy
     role.to_s.in?(%w[owner admin])
   end
 
+  alias_method :manage_members?, :manage?
+
   class Scope < Scope
     def resolve
       scope.for_user(user)

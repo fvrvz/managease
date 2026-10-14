@@ -66,10 +66,14 @@ Rails.application.routes.draw do
             get :burndown
             get :velocity
             get :issue_summary
+            get :time_tracking
           end
         end
         resources :imports, only: [:create]
       end
+
+      # Users management for managers & leads
+      resources :users, only: [:index, :create, :update, :destroy]
 
       # Issues (full CRUD at top level for cross-project convenience)
       resources :issues do
@@ -77,6 +81,8 @@ Rails.application.routes.draw do
           patch :move
           patch :reorder
           patch :assign
+          get :work_logs
+          post :work_logs, to: 'issues#log_work'
         end
         resources :comments
         resources :attachments, only: [:index, :create, :destroy]

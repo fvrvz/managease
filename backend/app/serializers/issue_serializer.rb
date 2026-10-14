@@ -45,6 +45,18 @@ class IssueSerializer
     issue.comments.size
   end
 
+  attribute :start_date do |issue|
+    issue.try(:start_date)
+  end
+
+  attribute :estimated_hours do |issue|
+    issue.try(:estimated_hours)
+  end
+
+  attribute :logged_hours do |issue|
+    issue.try(:logged_hours) || 0.0
+  end
+
   belongs_to :project, serializer: ProjectSerializer
   belongs_to :sprint, serializer: SprintSerializer, optional: true
   belongs_to :epic, serializer: proc { EpicSerializer }, optional: true

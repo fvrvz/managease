@@ -1,7 +1,7 @@
 import { createSignal } from 'solid-js';
 import { createStore, produce } from 'solid-js/store';
 import { projectsApi, sprintsApi, issuesApi, epicsApi, labelsApi } from '@/api/endpoints';
-import type { Project, Sprint, Epic, Issue, Label, IssueStatus } from '@/types';
+import type { Project, Sprint, Epic, Issue, Label, IssueStatus, User } from '@/types';
 
 // Helper to normalize JSONAPI response or plain response
 const normalizeItem = (item: any) => {
@@ -20,6 +20,9 @@ const normalizeItem = (item: any) => {
   if (obj.issue_type !== undefined && obj.type === undefined) obj.type = obj.issue_type;
   if (obj.workflow_statuses !== undefined && obj.workflowStatuses === undefined) obj.workflowStatuses = obj.workflow_statuses;
   if (obj.github_repo !== undefined && obj.githubRepo === undefined) obj.githubRepo = obj.github_repo;
+  if (obj.start_date !== undefined && obj.startDate === undefined) obj.startDate = obj.start_date;
+  if (obj.estimated_hours !== undefined && obj.estimatedHours === undefined) obj.estimatedHours = obj.estimated_hours;
+  if (obj.logged_hours !== undefined && obj.loggedHours === undefined) obj.loggedHours = obj.logged_hours;
   return obj;
 };
 
@@ -43,6 +46,7 @@ const [sprints, setSprints] = createStore<Sprint[]>([]);
 const [epics, setEpics] = createStore<Epic[]>([]);
 const [issues, setIssues] = createStore<Issue[]>([]);
 const [labels, setLabels] = createStore<Label[]>([]);
+const [projectMembers, setProjectMembers] = createStore<User[]>([]);
 const [loading, setLoading] = createSignal(false);
 const [projectError, setProjectError] = createSignal<string | null>(null);
 
@@ -56,6 +60,7 @@ export {
   epics,
   issues,
   labels,
+  projectMembers,
   loading as projectLoading,
   projectError,
 };
@@ -136,8 +141,12 @@ export const deleteSprint = async (projectId: string, sprintId: string): Promise
   setSprints((ss) => ss.filter((s) => s.id !== sprintId));
 };
 
-export const startSprint = async (projectId: string, sprintId: string): Promise<void> => {
-  const res = await sprintsApi.start(projectId, sprintId);
+export const startSprint = async (
+  projectId: string,
+  sprintId: string,
+  data?: { start_date?: string; end_date?: string; goal?: string; name?: string },
+): Promise<void> => {
+  const res = await sprintsApi.start(projectId, sprintId, data);
   const updated = extractSingle<Sprint>(res.data);
   setSprints(
     (s) => s.id === sprintId,
@@ -265,4 +274,30 @@ export const createLabel = async (projectId: string, data: Partial<Label>): Prom
 export const deleteLabel = async (projectId: string, labelId: string): Promise<void> => {
   await labelsApi.delete(projectId, labelId);
   setLabels((ls) => ls.filter((l) => l.id !== labelId));
+};
+
+// ── Project Members & Assignment ──────────────
+export const fetchProjectMembers = async (projectId: string): Promise<void> => {
+  try {
+    const res = await projectsApi.getMembers(projectId);
+    const membersData = (res.data as any) || [];
+    const users = membersData.map((m: any) =>
+      m.user?.attributes ? { id: m.user.id, ...m.user.attributes } : (m.user || m)
+    );
+    setProjectMembers(users);
+  } catch (e) {
+    console.error('Failed to load project members', e);
+  }
+};
+
+export const assignIssue = async (issueId: string, assigneeId: string | null): Promise<void> => {
+  await issuesApi.assign(issueId, assigneeId);
+  const assigneeObj = projectMembers.find((u) => String(u.id) === String(assigneeId));
+  setIssues(
+    (i) => String(i.id) === String(issueId),
+    produce((issue) => {
+      issue.assigneeId = assigneeId || undefined;
+      issue.assignee = assigneeObj || undefined;
+    }),
+  );
 };

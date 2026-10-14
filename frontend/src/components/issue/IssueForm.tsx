@@ -1,4 +1,4 @@
-import { createSignal, createEffect, For, Show } from 'solid-js';
+import { createSignal, createEffect, onMount, For, Show } from 'solid-js';
 import {
   Bookmark,
   Bug,
@@ -11,19 +11,30 @@ import {
   ChevronsDown,
   Calendar,
   Layers as EpicIcon,
+  User,
+  Clock,
 } from 'lucide-solid';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { RichSelect, RichSelectOption } from '@/components/ui/RichSelect';
 import { useToast } from '@/components/ui/Toast';
-import { createIssue, updateIssue, sprints, epics, labels } from '@/stores/project.store';
+import {
+  createIssue,
+  updateIssue,
+  sprints,
+  epics,
+  projectMembers,
+  fetchProjectMembers,
+  currentProject,
+  projects,
+} from '@/stores/project.store';
 import type { Issue, IssueType, IssueStatus, IssuePriority } from '@/types';
 
 interface IssueFormProps {
   open: boolean;
   onClose: () => void;
-  projectId: string;
+  projectId?: string;
   sprintId?: string;
   defaultStatus?: IssueStatus;
   editIssue?: Issue;
@@ -101,38 +112,55 @@ export function IssueForm(props: IssueFormProps) {
   const toast = useToast();
   const isEdit = () => !!props.editIssue;
 
+  const targetProjectId = () =>
+    props.projectId || currentProject()?.id || (projects.length > 0 ? projects[0].id : '');
+
   const [title, setTitle] = createSignal('');
   const [type, setType] = createSignal<IssueType>('task');
   const [status, setStatus] = createSignal<IssueStatus>('todo');
   const [priority, setPriority] = createSignal<IssuePriority>('medium');
+  const [assigneeId, setAssigneeId] = createSignal('');
   const [description, setDescription] = createSignal('');
   const [sprintId, setSprintId] = createSignal('');
   const [epicId, setEpicId] = createSignal('');
   const [storyPoints, setStoryPoints] = createSignal<string>('');
+  const [startDate, setStartDate] = createSignal('');
+  const [dueDate, setDueDate] = createSignal('');
+  const [estimatedHours, setEstimatedHours] = createSignal('');
   const [saving, setSaving] = createSignal(false);
   const [errors, setErrors] = createSignal<Record<string, string>>({});
 
-  // Reset or initialize state whenever modal opens or props change
   createEffect(() => {
     if (props.open) {
+      const pid = targetProjectId();
+      if (pid) fetchProjectMembers(pid);
+
       if (props.editIssue) {
         setTitle(props.editIssue.title || '');
         setType(props.editIssue.type || 'task');
         setStatus(props.editIssue.status || 'todo');
         setPriority(props.editIssue.priority || 'medium');
+        setAssigneeId(props.editIssue.assigneeId || '');
         setDescription(props.editIssue.description || '');
         setSprintId(props.editIssue.sprintId || '');
         setEpicId(props.editIssue.epicId || '');
         setStoryPoints(props.editIssue.storyPoints != null ? String(props.editIssue.storyPoints) : '');
+        setStartDate(props.editIssue.startDate?.slice(0, 10) || '');
+        setDueDate(props.editIssue.dueDate?.slice(0, 10) || '');
+        setEstimatedHours(props.editIssue.estimatedHours != null ? String(props.editIssue.estimatedHours) : '');
       } else {
         setTitle('');
         setType('task');
         setStatus(props.defaultStatus || 'todo');
         setPriority('medium');
+        setAssigneeId('');
         setDescription('');
         setSprintId(props.sprintId || '');
         setEpicId('');
         setStoryPoints('');
+        setStartDate('');
+        setDueDate('');
+        setEstimatedHours('');
       }
       setErrors({});
     }
@@ -141,6 +169,7 @@ export function IssueForm(props: IssueFormProps) {
   const validate = () => {
     const errs: Record<string, string> = {};
     if (!title().trim()) errs.title = 'Title is required';
+    if (!targetProjectId()) errs.title = 'Please select or create a project first';
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -148,6 +177,7 @@ export function IssueForm(props: IssueFormProps) {
   const handleSubmit = async () => {
     if (!validate()) return;
     setSaving(true);
+    const pid = targetProjectId();
     try {
       const data: any = {
         title: title().trim(),
@@ -155,21 +185,22 @@ export function IssueForm(props: IssueFormProps) {
         issue_type: type(),
         status: status() || 'todo',
         priority: priority(),
+        assignee_id: assigneeId() || null,
         description: description(),
         sprint_id: sprintId() || null,
-        sprintId: sprintId() || null,
         epic_id: epicId() || null,
-        epicId: epicId() || null,
         story_points: storyPoints() ? parseInt(storyPoints(), 10) : null,
-        storyPoints: storyPoints() ? parseInt(storyPoints(), 10) : null,
+        start_date: startDate() || null,
+        due_date: dueDate() || null,
+        estimated_hours: estimatedHours() ? parseFloat(estimatedHours()) : null,
       };
 
       let saved: Issue;
       if (isEdit() && props.editIssue) {
-        await updateIssue(props.projectId, props.editIssue.id, data);
+        await updateIssue(pid, props.editIssue.id, data);
         saved = { ...props.editIssue, ...data };
       } else {
-        saved = await createIssue(props.projectId, data);
+        saved = await createIssue(pid, data);
       }
       toast.addToast(`Issue ${isEdit() ? 'updated' : 'created'} successfully`, 'success');
       props.onSaved?.(saved);
@@ -184,6 +215,20 @@ export function IssueForm(props: IssueFormProps) {
       setSaving(false);
     }
   };
+
+  const assigneeOptions = (): RichSelectOption[] => [
+    { value: '', label: 'Unassigned', icon: <User class="w-4 h-4 text-slate-400" /> },
+    ...projectMembers.map((u) => ({
+      value: u.id,
+      label: u.name || u.email,
+      icon: (
+        <div class="w-5 h-5 rounded-full bg-blue-600 text-white font-bold text-[10px] flex items-center justify-center">
+          {(u.name || u.email).slice(0, 2).toUpperCase()}
+        </div>
+      ),
+      description: u.email,
+    })),
+  ];
 
   const sprintOptions = (): RichSelectOption[] => [
     {
@@ -226,6 +271,7 @@ export function IssueForm(props: IssueFormProps) {
           error={errors().title}
         />
 
+        {/* Type & Priority */}
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <RichSelect
             label="Issue Type"
@@ -243,6 +289,7 @@ export function IssueForm(props: IssueFormProps) {
           />
         </div>
 
+        {/* Status & Assignee */}
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <RichSelect
             label="Status"
@@ -251,6 +298,17 @@ export function IssueForm(props: IssueFormProps) {
             onChange={(val) => setStatus(val as IssueStatus)}
             fullWidth
           />
+          <RichSelect
+            label="Assignee"
+            options={assigneeOptions()}
+            value={assigneeId()}
+            onChange={setAssigneeId}
+            fullWidth
+          />
+        </div>
+
+        {/* Story Points & Estimated Hours */}
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Input
             label="Story Points"
             type="number"
@@ -260,30 +318,69 @@ export function IssueForm(props: IssueFormProps) {
             value={storyPoints()}
             onInput={(e) => setStoryPoints(e.currentTarget.value)}
           />
+          <Input
+            label="Estimated Hours"
+            type="number"
+            min="0"
+            step="0.5"
+            placeholder="e.g. 4.5"
+            value={estimatedHours()}
+            onInput={(e) => setEstimatedHours(e.currentTarget.value)}
+          />
         </div>
 
-        <RichSelect
-          label="Sprint"
-          options={sprintOptions()}
-          value={sprintId()}
-          onChange={setSprintId}
-          fullWidth
-        />
+        {/* Dates: Start Date & Due Date */}
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="text-xs font-semibold text-slate-600 uppercase tracking-wide block mb-1">
+              Start Date
+            </label>
+            <input
+              type="date"
+              class="w-full text-xs bg-white border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition"
+              value={startDate()}
+              onChange={(e) => setStartDate(e.currentTarget.value)}
+            />
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-slate-600 uppercase tracking-wide block mb-1">
+              Due Date
+            </label>
+            <input
+              type="date"
+              class="w-full text-xs bg-white border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition"
+              value={dueDate()}
+              onChange={(e) => setDueDate(e.currentTarget.value)}
+            />
+          </div>
+        </div>
 
-        <RichSelect
-          label="Epic"
-          options={epicOptions()}
-          value={epicId()}
-          onChange={setEpicId}
-          fullWidth
-        />
+        {/* Sprint & Epic */}
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <RichSelect
+            label="Sprint"
+            options={sprintOptions()}
+            value={sprintId()}
+            onChange={setSprintId}
+            fullWidth
+          />
 
+          <RichSelect
+            label="Epic"
+            options={epicOptions()}
+            value={epicId()}
+            onChange={setEpicId}
+            fullWidth
+          />
+        </div>
+
+        {/* Description */}
         <div>
           <label class="text-xs font-semibold text-slate-600 uppercase tracking-wide block mb-1">
             Description
           </label>
           <textarea
-            class="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 resize-y min-h-[100px] transition-colors"
+            class="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 resize-y min-h-[90px] transition-colors"
             placeholder="Add a detailed description..."
             value={description()}
             onInput={(e) => setDescription(e.currentTarget.value)}

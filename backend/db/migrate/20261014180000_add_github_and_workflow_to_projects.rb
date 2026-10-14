@@ -8,3 +8,4 @@ class AddGithubAndWorkflowToProjects < ActiveRecord::Migration[8.0]
     add_column :projects, :workflow_statuses, :jsonb, default: []
   end
 end
+

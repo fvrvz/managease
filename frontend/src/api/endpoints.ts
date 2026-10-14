@@ -8,6 +8,7 @@ import type {
   Issue,
   Label,
   Comment,
+  WorkLog,
   BurndownData,
   VelocityPoint,
   IssueBreakdown,
@@ -56,6 +57,9 @@ export const projectsApi = {
   addMember: (projectId: string, userId: string, role: string) =>
     apiClient.post(`/api/v1/projects/${projectId}/add_member`, { user_id: userId, role }),
 
+  updateMember: (projectId: string, userId: string, role: string) =>
+    apiClient.put(`/api/v1/projects/${projectId}/members/${userId}`, { role }),
+
   removeMember: (projectId: string, userId: string) =>
     apiClient.delete(`/api/v1/projects/${projectId}/members/${userId}`),
 
@@ -86,8 +90,11 @@ export const sprintsApi = {
   delete: (projectId: string, sprintId: string) =>
     apiClient.delete(`/api/v1/projects/${projectId}/sprints/${sprintId}`),
 
-  start: (projectId: string, sprintId: string) =>
-    apiClient.post<Sprint>(`/api/v1/projects/${projectId}/sprints/${sprintId}/start`),
+  start: (
+    projectId: string,
+    sprintId: string,
+    data?: { start_date?: string; end_date?: string; goal?: string; name?: string },
+  ) => apiClient.post<Sprint>(`/api/v1/projects/${projectId}/sprints/${sprintId}/start`, data),
 
   complete: (projectId: string, sprintId: string) =>
     apiClient.post<Sprint>(`/api/v1/projects/${projectId}/sprints/${sprintId}/complete`),
@@ -130,6 +137,15 @@ export const issuesApi = {
 
   reorder: (projectId: string, issueId: string, position: number) =>
     apiClient.patch(`/api/v1/issues/${issueId}/reorder`, { position }),
+
+  assign: (issueId: string, assigneeId: string | null) =>
+    apiClient.patch(`/api/v1/issues/${issueId}/assign`, { assignee_id: assigneeId }),
+
+  getWorkLogs: (issueId: string) =>
+    apiClient.get<WorkLog[]>(`/api/v1/issues/${issueId}/work_logs`),
+
+  logWork: (issueId: string, data: { hours: number; logged_date?: string; description?: string }) =>
+    apiClient.post(`/api/v1/issues/${issueId}/work_logs`, data),
 };
 
 // ── Epics ─────────────────────────────────────
@@ -191,6 +207,20 @@ export const reportsApi = {
 
   issueSummary: (projectId: string) =>
     apiClient.get<{ data: any }>(`/api/v1/projects/${projectId}/reports/issue_summary`),
+
+  timeTracking: (projectId: string, sprintId?: string) =>
+    apiClient.get<{ data: any }>(`/api/v1/projects/${projectId}/reports/time_tracking`, {
+      params: { sprint_id: sprintId },
+    }),
+};
+
+// ── Users Management ──────────────────────────
+
+export const usersApi = {
+  list: (q?: string) => apiClient.get<PaginatedResponse<User> | { data: User[] }>('/api/v1/users', { params: { q } }),
+  create: (data: Partial<User> & { password?: string }) => apiClient.post<{ data: User }>('/api/v1/users', data),
+  update: (id: string, data: Partial<User>) => apiClient.put<{ data: User }>(`/api/v1/users/${id}`, data),
+  delete: (id: string) => apiClient.delete(`/api/v1/users/${id}`),
 };
 
 // ── Imports ───────────────────────────────────

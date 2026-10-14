@@ -4,7 +4,7 @@ module Api
   module V1
     class IssuesController < BaseController
       before_action :set_project, only: [:index, :create]
-      before_action :set_issue, only: [:show, :update, :destroy, :move, :reorder, :assign]
+      before_action :set_issue, only: [:show, :update, :destroy, :move, :reorder, :assign, :work_logs, :log_work]
 
       ALLOWED_INCLUDES = %w[epic labels assignee reporter sprint comments subtasks].freeze
 
@@ -94,6 +94,49 @@ module Api
         render_serialized(IssueSerializer, @issue, include: ALLOWED_INCLUDES)
       end
 
+      # GET /api/v1/issues/:id/work_logs
+      def work_logs
+        authorize @issue, :show?
+        logs = @issue.work_logs.includes(:user).order(logged_date: :desc, created_at: :desc)
+        render json: logs.map { |wl|
+          {
+            id: wl.id,
+            hours: wl.hours.to_f,
+            logged_date: wl.logged_date,
+            description: wl.description,
+            user: { id: wl.user.id, name: wl.user.name, email: wl.user.email },
+            created_at: wl.created_at
+          }
+        }
+      end
+
+      # POST /api/v1/issues/:id/work_logs
+      def log_work
+        authorize @issue, :update?
+        hours = params[:hours].to_f
+        if hours <= 0
+          render json: { error: 'Hours must be greater than 0' }, status: :unprocessable_entity
+          return
+        end
+
+        log = @issue.work_logs.create!(
+          user: current_user,
+          hours: hours,
+          logged_date: params[:logged_date].presence || Date.today,
+          description: params[:description]
+        )
+
+        render json: {
+          id: log.id,
+          hours: log.hours.to_f,
+          logged_date: log.logged_date,
+          description: log.description,
+          total_logged: @issue.reload.try(:logged_hours).to_f
+        }, status: :created
+      rescue StandardError => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      end
+
       private
 
       def set_project
@@ -109,7 +152,8 @@ module Api
         source = params[:issue].present? ? params.require(:issue) : params
         p = source.permit(
           :title, :description, :issue_type, :type, :status, :priority,
-          :story_points, :storyPoints, :due_date, :dueDate,
+          :story_points, :storyPoints, :due_date, :dueDate, :start_date, :startDate,
+          :estimated_hours, :estimatedHours,
           :sprint_id, :sprintId, :epic_id, :epicId,
           :assignee_id, :assigneeId, :parent_id, :parentId,
           label_ids: []
@@ -117,10 +161,18 @@ module Api
         p[:issue_type] = p.delete(:type) if p.key?(:type) && p[:issue_type].blank?
         p[:story_points] = p.delete(:storyPoints) if p.key?(:storyPoints) && p[:story_points].blank?
         p[:due_date] = p.delete(:dueDate) if p.key?(:dueDate) && p[:due_date].blank?
+        p[:start_date] = p.delete(:startDate) if p.key?(:startDate) && p[:start_date].blank?
+        p[:estimated_hours] = p.delete(:estimatedHours) if p.key?(:estimatedHours) && p[:estimated_hours].blank?
         p[:sprint_id] = p.delete(:sprintId) if p.key?(:sprintId) && p[:sprint_id].blank?
         p[:epic_id] = p.delete(:epicId) if p.key?(:epicId) && p[:epic_id].blank?
         p[:assignee_id] = p.delete(:assigneeId) if p.key?(:assigneeId) && p[:assignee_id].blank?
         p[:parent_id] = p.delete(:parentId) if p.key?(:parentId) && p[:parent_id].blank?
+
+        # Blank to nil conversion for optional fields
+        %i[sprint_id epic_id assignee_id parent_id start_date due_date estimated_hours story_points].each do |k|
+          p[k] = nil if p.key?(k) && p[k].blank?
+        end
+
         p
       end
 

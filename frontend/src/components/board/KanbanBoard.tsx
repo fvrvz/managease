@@ -1,8 +1,9 @@
 import { createSignal, createMemo, For, Show, onMount } from 'solid-js';
-import { Search, Plus, Calendar, Filter, ChevronsUp, ChevronUp, Minus, ChevronDown, ChevronsDown } from 'lucide-solid';
+import { Search, Plus, Calendar, Filter, ChevronsUp, ChevronUp, Minus, ChevronDown, ChevronsDown, User as UserIcon, X } from 'lucide-solid';
 import { KanbanColumn } from './KanbanColumn';
 import { IssueForm } from '@/components/issue/IssueForm';
 import { RichSelect, RichSelectOption } from '@/components/ui/RichSelect';
+import { Avatar } from '@/components/ui/Avatar';
 import { ColumnSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import {
@@ -13,7 +14,10 @@ import {
   globalSearchQuery,
   setGlobalSearchQuery,
   currentProject,
+  projectMembers,
+  fetchProjectMembers,
 } from '@/stores/project.store';
+import { user as currentUser } from '@/stores/auth.store';
 import type { Issue, IssueStatus, Sprint, WorkflowStatus } from '@/types';
 
 interface KanbanBoardProps {
@@ -67,6 +71,7 @@ export function KanbanBoard(props: KanbanBoardProps) {
   const [loading, setLoading] = createSignal(true);
 
   onMount(async () => {
+    fetchProjectMembers(props.projectId);
     const active = sprints.find((s) => s.status === 'active');
     if (active) {
       setActiveSprint(active);
@@ -100,7 +105,9 @@ export function KanbanBoard(props: KanbanBoardProps) {
           (i.description && i.description.toLowerCase().includes(q)),
       );
     }
-    if (filterAssignee()) list = list.filter((i) => i.assigneeId === filterAssignee());
+    if (filterAssignee()) {
+      list = list.filter((i) => String(i.assigneeId) === String(filterAssignee()));
+    }
     if (filterPriority()) list = list.filter((i) => i.priority === filterPriority());
     return list;
   });
@@ -158,7 +165,7 @@ export function KanbanBoard(props: KanbanBoardProps) {
         </Show>
 
         {/* Search */}
-        <div class="relative w-56">
+        <div class="relative w-52">
           <Search class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             class="w-full pl-9 pr-3 py-1.5 text-xs border border-slate-300 rounded-lg outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 bg-white placeholder-slate-400 transition"
@@ -169,13 +176,80 @@ export function KanbanBoard(props: KanbanBoardProps) {
         </div>
 
         {/* Priority filter with RichSelect */}
-        <div class="w-44">
+        <div class="w-40">
           <RichSelect
             size="sm"
             options={priorityFilterOptions}
             value={filterPriority()}
             onChange={setFilterPriority}
           />
+        </div>
+
+        {/* Jira-style User / Assignee Quick Filter */}
+        <div class="flex items-center gap-2 pl-2 border-l border-slate-200">
+          <button
+            type="button"
+            onClick={() => {
+              const myId = currentUser()?.id;
+              if (myId) {
+                setFilterAssignee((prev) => (String(prev) === String(myId) ? null : String(myId)));
+              }
+            }}
+            class={`px-2.5 py-1 text-xs rounded-lg transition-colors border ${
+              String(filterAssignee()) === String(currentUser()?.id)
+                ? 'bg-blue-50 text-blue-700 border-blue-300 font-semibold'
+                : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
+            }`}
+          >
+            Only my issues
+          </button>
+
+          {/* Member Avatars */}
+          <div class="flex items-center -space-x-1.5 ml-1">
+            <For each={projectMembers}>
+              {(member) => {
+                const isSelected = () => String(filterAssignee()) === String(member.id);
+                return (
+                  <button
+                    type="button"
+                    title={member.name || member.email || 'Team Member'}
+                    onClick={() => {
+                      setFilterAssignee((prev) =>
+                        String(prev) === String(member.id) ? null : String(member.id)
+                      );
+                    }}
+                    class={`relative rounded-full transition-transform hover:z-10 hover:scale-105 ${
+                      isSelected()
+                        ? 'ring-2 ring-blue-600 ring-offset-2 z-10'
+                        : 'opacity-85 hover:opacity-100'
+                    }`}
+                  >
+                    <Avatar
+                      name={member.name || member.email}
+                      src={member.avatarUrl}
+                      size="sm"
+                      class="border-2 border-white shadow-xs"
+                    />
+                  </button>
+                );
+              }}
+            </For>
+          </div>
+
+          <Show when={filterAssignee() || filterPriority() || globalSearchQuery()}>
+            <button
+              type="button"
+              onClick={() => {
+                setFilterAssignee(null);
+                setFilterPriority('');
+                setGlobalSearchQuery('');
+              }}
+              class="text-xs text-slate-500 hover:text-slate-800 ml-1 flex items-center gap-1 hover:underline"
+            >
+              <X class="w-3 h-3" />
+              <span>Clear</span>
+            </button>
+          </Show>
         </div>
 
         {/* Create button */}

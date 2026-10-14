@@ -46,19 +46,25 @@ module Api
 
       def start
         authorize @sprint, :update?
-        @sprint.start!
+        s_date = params[:start_date].presence || params.dig(:sprint, :start_date).presence
+        e_date = params[:end_date].presence || params.dig(:sprint, :end_date).presence
+        goal = params[:goal].presence || params.dig(:sprint, :goal).presence
+        name = params[:name].presence || params.dig(:sprint, :name).presence
+        @sprint.name = name if name
+        @sprint.goal = goal if goal
+        @sprint.start!(s_date: s_date, e_date: e_date)
         render_serialized(SprintSerializer, @sprint)
-      rescue RuntimeError => e
+      rescue StandardError => e
         render json: { error: e.message }, status: :unprocessable_entity
       end
 
       def complete
         authorize @sprint, :update?
         move_to = params[:move_incomplete_to_sprint_id].present? ?
-                    @project.sprints.find(params[:move_incomplete_to_sprint_id]) : nil
+                    @project.sprints.find_by(id: params[:move_incomplete_to_sprint_id]) : nil
         @sprint.complete!(move_incomplete_to: move_to)
         render_serialized(SprintSerializer, @sprint)
-      rescue RuntimeError => e
+      rescue StandardError => e
         render json: { error: e.message }, status: :unprocessable_entity
       end
 

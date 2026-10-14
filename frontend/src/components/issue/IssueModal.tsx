@@ -1,4 +1,4 @@
-import { createSignal, createEffect, Show, For } from 'solid-js';
+import { createSignal, createEffect, onMount, Show, For } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { clsx } from 'clsx';
 import {
@@ -17,16 +17,27 @@ import {
   ChevronDown,
   ChevronsDown,
   MessageSquare,
+  Clock,
+  User,
+  Plus,
 } from 'lucide-solid';
 import { issuesApi, commentsApi } from '@/api/endpoints';
-import { updateIssue } from '@/stores/project.store';
+import {
+  updateIssue,
+  assignIssue,
+  projectMembers,
+  fetchProjectMembers,
+} from '@/stores/project.store';
 import { user } from '@/stores/auth.store';
 import { useToast } from '@/components/ui/Toast';
 import { RichSelect, RichSelectOption } from '@/components/ui/RichSelect';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Spinner } from '@/components/ui/Spinner';
-import type { Issue, Comment, IssueStatus, IssuePriority, IssueType } from '@/types';
+import { Modal } from '@/components/ui/Modal';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import type { Issue, Comment, WorkLog, IssueStatus, IssuePriority, IssueType } from '@/types';
 
 interface IssueModalProps {
   issue: Issue;
@@ -79,6 +90,8 @@ export function IssueModal(props: IssueModalProps) {
   const toast = useToast();
   const [localIssue, setLocalIssue] = createSignal<Issue>(props.issue);
   const [comments, setComments] = createSignal<Comment[]>([]);
+  const [workLogs, setWorkLogs] = createSignal<WorkLog[]>([]);
+  const [activeTab, setActiveTab] = createSignal<'comments' | 'worklogs'>('comments');
   const [newComment, setNewComment] = createSignal('');
   const [editingTitle, setEditingTitle] = createSignal(false);
   const [title, setTitle] = createSignal(props.issue.title);
@@ -87,8 +100,17 @@ export function IssueModal(props: IssueModalProps) {
   const [loadingComments, setLoadingComments] = createSignal(false);
   const [copiedBranch, setCopiedBranch] = createSignal(false);
 
-  createEffect(() => {
+  // Log work modal
+  const [logWorkModalOpen, setLogWorkModalOpen] = createSignal(false);
+  const [logHours, setLogHours] = createSignal('');
+  const [logDate, setLogDate] = createSignal(new Date().toISOString().slice(0, 10));
+  const [logDescription, setLogDescription] = createSignal('');
+  const [savingLog, setSavingLog] = createSignal(false);
+
+  onMount(() => {
+    fetchProjectMembers(props.issue.projectId);
     loadComments();
+    loadWorkLogs();
   });
 
   const loadComments = async () => {
@@ -103,15 +125,42 @@ export function IssueModal(props: IssueModalProps) {
     }
   };
 
+  const loadWorkLogs = async () => {
+    try {
+      const res = await issuesApi.getWorkLogs(localIssue().id);
+      setWorkLogs(res.data);
+    } catch {
+      // Ignored
+    }
+  };
+
   const handleFieldUpdate = async (field: keyof Issue, value: unknown) => {
     const prev = localIssue();
     setLocalIssue({ ...prev, [field]: value } as Issue);
     try {
-      await updateIssue(prev.projectId, prev.id, { [field]: value });
+      const payloadKey =
+        field === 'startDate' ? 'start_date' : field === 'dueDate' ? 'due_date' : field;
+      await updateIssue(prev.projectId, prev.id, { [payloadKey]: value });
       props.onUpdated?.({ ...prev, [field]: value } as Issue);
     } catch {
       setLocalIssue(prev);
       toast.addToast('Failed to update issue', 'error');
+    }
+  };
+
+  const handleAssigneeChange = async (userId: string) => {
+    try {
+      await assignIssue(localIssue().id, userId || null);
+      const member = projectMembers.find((u) => String(u.id) === String(userId));
+      setLocalIssue((prev) => ({
+        ...prev,
+        assigneeId: userId || undefined,
+        assignee: member || undefined,
+      }));
+      props.onUpdated?.(localIssue());
+      toast.addToast(`Assigned to ${member?.name || 'Unassigned'}`, 'success');
+    } catch {
+      toast.addToast('Failed to update assignee', 'error');
     }
   };
 
@@ -142,8 +191,41 @@ export function IssueModal(props: IssueModalProps) {
     }
   };
 
+  const handleLogWork = async () => {
+    const hours = parseFloat(logHours());
+    if (isNaN(hours) || hours <= 0) {
+      toast.addToast('Please enter valid hours greater than 0', 'error');
+      return;
+    }
+    setSavingLog(true);
+    try {
+      const res = await issuesApi.logWork(localIssue().id, {
+        hours,
+        logged_date: logDate(),
+        description: logDescription().trim() || undefined,
+      });
+
+      const newTotal = res.data?.total_logged || (localIssue().loggedHours || 0) + hours;
+      setLocalIssue((prev) => ({ ...prev, loggedHours: newTotal }));
+      props.onUpdated?.(localIssue());
+
+      setLogWorkModalOpen(false);
+      setLogHours('');
+      setLogDescription('');
+      loadWorkLogs();
+      toast.addToast(`Logged ${hours}h successfully`, 'success');
+    } catch {
+      toast.addToast('Failed to log work', 'error');
+    } finally {
+      setSavingLog(false);
+    }
+  };
+
   const issueKey = () =>
-    localIssue().key || (props.projectKey ? `${props.projectKey}-${localIssue().number || localIssue().id}` : `#${localIssue().id}`);
+    localIssue().key ||
+    (props.projectKey
+      ? `${props.projectKey}-${localIssue().number || localIssue().id}`
+      : `#${localIssue().id}`);
 
   const branchName = () => {
     const slug = localIssue()
@@ -163,15 +245,29 @@ export function IssueModal(props: IssueModalProps) {
   const renderTypeIcon = (type: IssueType) => {
     switch (type) {
       case 'story':
-        return <Bookmark class="w-4 h-4 text-emerald-600 fill-emerald-500/20" />;
+        return <Bookmark class="w-4 h-4 text-emerald-600 fill-emerald-500/20 shrink-0" />;
       case 'bug':
-        return <Bug class="w-4 h-4 text-red-600 fill-red-500/20" />;
+        return <Bug class="w-4 h-4 text-red-600 fill-red-500/20 shrink-0" />;
       case 'subtask':
-        return <Layers class="w-4 h-4 text-slate-500 fill-slate-500/20" />;
+        return <Layers class="w-4 h-4 text-slate-500 fill-slate-500/20 shrink-0" />;
       default:
-        return <CheckSquare class="w-4 h-4 text-blue-600 fill-blue-500/20" />;
+        return <CheckSquare class="w-4 h-4 text-blue-600 fill-blue-500/20 shrink-0" />;
     }
   };
+
+  const assigneeOptions = (): RichSelectOption[] => [
+    { value: '', label: 'Unassigned', icon: <User class="w-4 h-4 text-slate-400" /> },
+    ...projectMembers.map((u) => ({
+      value: u.id,
+      label: u.name || u.email,
+      icon: (
+        <div class="w-5 h-5 rounded-full bg-blue-600 text-white font-bold text-[10px] flex items-center justify-center">
+          {(u.name || u.email).slice(0, 2).toUpperCase()}
+        </div>
+      ),
+      description: u.email,
+    })),
+  ];
 
   return (
     <Portal>
@@ -180,7 +276,10 @@ export function IssueModal(props: IssueModalProps) {
         onKeyDown={(e) => e.key === 'Escape' && props.onClose()}
       >
         {/* Backdrop */}
-        <div class="flex-1 bg-black/40 backdrop-blur-xs transition-opacity" onClick={props.onClose} />
+        <div
+          class="flex-1 bg-black/40 backdrop-blur-xs transition-opacity"
+          onClick={props.onClose}
+        />
 
         {/* Panel */}
         <div class="slide-in-right bg-white w-full max-w-4xl flex flex-col shadow-modal overflow-hidden h-full">
@@ -272,71 +371,145 @@ export function IssueModal(props: IssueModalProps) {
                   git checkout -b {branchName()}
                 </code>
                 <p class="text-[11px] text-slate-500 mt-2">
-                  Reference <span class="font-mono font-semibold text-slate-700">{issueKey()}</span> in branch, commit message, or PR title for automatic bot linking.
+                  Reference{' '}
+                  <span class="font-mono font-semibold text-slate-700">{issueKey()}</span> in branch,
+                  commit message, or PR title for automatic bot linking.
                 </p>
               </div>
 
-              {/* Activity / Comments */}
+              {/* Activity Section: Tabs for Comments and Work Logs */}
               <div>
-                <div class="flex items-center gap-2 mb-3">
-                  <MessageSquare class="w-4 h-4 text-slate-500" />
-                  <h3 class="text-sm font-bold text-slate-700">Activity & Comments</h3>
+                <div class="flex items-center justify-between border-b border-slate-200 pb-2 mb-4">
+                  <div class="flex items-center gap-4">
+                    <button
+                      onClick={() => setActiveTab('comments')}
+                      class={clsx(
+                        'flex items-center gap-2 text-xs font-bold pb-2 -mb-2 border-b-2 transition',
+                        activeTab() === 'comments'
+                          ? 'border-blue-600 text-blue-600'
+                          : 'border-transparent text-slate-500 hover:text-slate-800'
+                      )}
+                    >
+                      <MessageSquare class="w-4 h-4" />
+                      <span>Comments ({comments().length})</span>
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('worklogs')}
+                      class={clsx(
+                        'flex items-center gap-2 text-xs font-bold pb-2 -mb-2 border-b-2 transition',
+                        activeTab() === 'worklogs'
+                          ? 'border-blue-600 text-blue-600'
+                          : 'border-transparent text-slate-500 hover:text-slate-800'
+                      )}
+                    >
+                      <Clock class="w-4 h-4" />
+                      <span>Work Log ({workLogs().length})</span>
+                    </button>
+                  </div>
+
+                  <Show when={activeTab() === 'worklogs'}>
+                    <button
+                      onClick={() => setLogWorkModalOpen(true)}
+                      class="flex items-center gap-1 px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-medium transition"
+                    >
+                      <Plus class="w-3.5 h-3.5" />
+                      <span>Log Time</span>
+                    </button>
+                  </Show>
                 </div>
 
-                {/* Comment list */}
-                <div class="space-y-3 mb-4">
-                  <Show when={loadingComments()}>
-                    <div class="py-4 text-center">
-                      <Spinner size="sm" />
+                {/* Tab: Comments */}
+                <Show when={activeTab() === 'comments'}>
+                  <div class="space-y-4">
+                    <div class="space-y-3 mb-4">
+                      <Show when={loadingComments()}>
+                        <div class="py-4 text-center">
+                          <Spinner size="sm" />
+                        </div>
+                      </Show>
+                      <For each={comments()}>
+                        {(comment) => (
+                          <div class="flex gap-3 bg-slate-50 rounded-xl p-3 border border-slate-100">
+                            <Avatar
+                              name={comment.author?.name || 'GitHub Bot'}
+                              src={comment.author?.avatarUrl}
+                              size="sm"
+                            />
+                            <div class="flex-1 min-w-0">
+                              <div class="flex items-center gap-2 mb-1">
+                                <span class="text-xs font-semibold text-slate-800">
+                                  {comment.author?.name || 'GitHub Bot'}
+                                </span>
+                                <span class="text-[11px] text-slate-400">
+                                  {new Date(comment.createdAt).toLocaleDateString()}
+                                </span>
+                              </div>
+                              <div class="text-sm text-slate-700 whitespace-pre-wrap prose-sm">
+                                {comment.body}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </For>
                     </div>
-                  </Show>
-                  <For each={comments()}>
-                    {(comment) => (
-                      <div class="flex gap-3 bg-slate-50 rounded-xl p-3 border border-slate-100">
-                        <Avatar
-                          name={comment.author?.name || 'GitHub Bot'}
-                          src={comment.author?.avatarUrl}
-                          size="sm"
+
+                    <div class="flex gap-3">
+                      <Avatar name={user()?.name} src={user()?.avatarUrl} size="sm" />
+                      <div class="flex-1 space-y-2">
+                        <textarea
+                          class="w-full text-sm border border-slate-200 rounded-xl p-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 resize-none min-h-[80px]"
+                          placeholder="Add a comment... (Markdown supported)"
+                          value={newComment()}
+                          onInput={(e) => setNewComment(e.currentTarget.value)}
                         />
-                        <div class="flex-1 min-w-0">
-                          <div class="flex items-center gap-2 mb-1">
-                            <span class="text-xs font-semibold text-slate-800">
-                              {comment.author?.name || 'GitHub Bot'}
-                            </span>
-                            <span class="text-[11px] text-slate-400">
-                              {new Date(comment.createdAt).toLocaleDateString()}
-                            </span>
-                          </div>
-                          <div class="text-sm text-slate-700 whitespace-pre-wrap prose-sm">
-                            {comment.body}
-                          </div>
+                        <div class="flex justify-end">
+                          <button
+                            onClick={submitComment}
+                            disabled={savingComment() || !newComment().trim()}
+                            class="px-4 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-xs"
+                          >
+                            {savingComment() ? 'Saving…' : 'Comment'}
+                          </button>
                         </div>
                       </div>
-                    )}
-                  </For>
-                </div>
-
-                {/* New comment input */}
-                <div class="flex gap-3">
-                  <Avatar name={user()?.name} src={user()?.avatarUrl} size="sm" />
-                  <div class="flex-1 space-y-2">
-                    <textarea
-                      class="w-full text-sm border border-slate-200 rounded-xl p-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 resize-none min-h-[80px]"
-                      placeholder="Add a comment... (Markdown supported)"
-                      value={newComment()}
-                      onInput={(e) => setNewComment(e.currentTarget.value)}
-                    />
-                    <div class="flex justify-end">
-                      <button
-                        onClick={submitComment}
-                        disabled={savingComment() || !newComment().trim()}
-                        class="px-4 py-1.5 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-xs"
-                      >
-                        {savingComment() ? 'Saving…' : 'Comment'}
-                      </button>
                     </div>
                   </div>
-                </div>
+                </Show>
+
+                {/* Tab: Work Logs */}
+                <Show when={activeTab() === 'worklogs'}>
+                  <div class="space-y-3">
+                    <Show
+                      when={workLogs().length > 0}
+                      fallback={
+                        <div class="p-6 text-center text-slate-400 text-xs italic bg-slate-50 rounded-xl">
+                          No work logged yet. Click "+ Log Work" to log time spent on this issue.
+                        </div>
+                      }
+                    >
+                      <For each={workLogs()}>
+                        {(log) => (
+                          <div class="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+                            <div class="flex items-center gap-3">
+                              <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold">
+                                {log.hours}h
+                              </div>
+                              <div>
+                                <div class="font-semibold text-slate-800">
+                                  {log.user?.name || 'User'} logged {log.hours} hours
+                                </div>
+                                <Show when={log.description}>
+                                  <p class="text-slate-500 mt-0.5">{log.description}</p>
+                                </Show>
+                              </div>
+                            </div>
+                            <span class="text-slate-400 font-mono text-[11px]">{log.loggedDate}</span>
+                          </div>
+                        )}
+                      </For>
+                    </Show>
+                  </div>
+                </Show>
               </div>
             </div>
 
@@ -366,31 +539,110 @@ export function IssueModal(props: IssueModalProps) {
                 />
               </div>
 
-              {/* Assignee */}
+              {/* Working Assignee RichSelect */}
               <div>
                 <p class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Assignee</p>
-                <div class="flex items-center gap-2.5 p-2 bg-white rounded-lg border border-slate-200">
-                  <Avatar name={localIssue().assignee?.name} src={localIssue().assignee?.avatarUrl} size="sm" />
-                  <span class="text-xs font-medium text-slate-700 truncate">
-                    {localIssue().assignee?.name ?? 'Unassigned'}
-                  </span>
-                </div>
+                <RichSelect
+                  value={localIssue().assigneeId || ''}
+                  options={assigneeOptions()}
+                  onChange={handleAssigneeChange}
+                  fullWidth
+                  size="sm"
+                />
               </div>
 
               {/* Reporter */}
               <div>
                 <p class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Reporter</p>
                 <div class="flex items-center gap-2.5 p-2 bg-white rounded-lg border border-slate-200">
-                  <Avatar name={localIssue().reporter?.name} src={localIssue().reporter?.avatarUrl} size="sm" />
+                  <Avatar
+                    name={localIssue().reporter?.name}
+                    src={localIssue().reporter?.avatarUrl}
+                    size="sm"
+                  />
                   <span class="text-xs font-medium text-slate-700 truncate">
                     {localIssue().reporter?.name ?? '—'}
                   </span>
                 </div>
               </div>
 
+              {/* Time Tracking Widget */}
+              <div class="bg-white p-3.5 rounded-xl border border-slate-200 space-y-2.5">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-1.5 text-xs font-bold text-slate-700">
+                    <Clock class="w-3.5 h-3.5 text-blue-600" />
+                    <span>Time Tracking</span>
+                  </div>
+                  <button
+                    onClick={() => setLogWorkModalOpen(true)}
+                    class="text-[11px] font-bold text-blue-600 hover:text-blue-700 transition"
+                  >
+                    + Log Work
+                  </button>
+                </div>
+
+                <div class="space-y-1">
+                  <div class="w-full h-2 rounded-full bg-slate-100 overflow-hidden flex">
+                    <div
+                      class="h-full bg-blue-600 transition-all duration-300"
+                      style={{
+                        width: `${Math.min(
+                          100,
+                          localIssue().estimatedHours
+                            ? ((localIssue().loggedHours || 0) / localIssue().estimatedHours!) * 100
+                            : localIssue().loggedHours
+                            ? 100
+                            : 0
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                  <div class="flex items-center justify-between text-[11px] text-slate-500">
+                    <span>
+                      Logged: <strong class="text-slate-800">{localIssue().loggedHours || 0}h</strong>
+                    </span>
+                    <span>
+                      Est:{' '}
+                      <strong class="text-slate-800">
+                        {localIssue().estimatedHours ? `${localIssue().estimatedHours}h` : 'None'}
+                      </strong>
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Dates: Start Date & Due Date */}
+              <div class="space-y-3">
+                <div>
+                  <p class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+                    Start Date
+                  </p>
+                  <input
+                    type="date"
+                    class="w-full text-xs bg-white border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    value={localIssue().startDate?.slice(0, 10) ?? ''}
+                    onChange={(e) => handleFieldUpdate('startDate', e.currentTarget.value || null)}
+                  />
+                </div>
+
+                <div>
+                  <p class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+                    Due Date
+                  </p>
+                  <input
+                    type="date"
+                    class="w-full text-xs bg-white border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    value={localIssue().dueDate?.slice(0, 10) ?? ''}
+                    onChange={(e) => handleFieldUpdate('dueDate', e.currentTarget.value || null)}
+                  />
+                </div>
+              </div>
+
               {/* Story Points */}
               <div>
-                <p class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Story Points</p>
+                <p class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+                  Story Points
+                </p>
                 <input
                   type="number"
                   min="0"
@@ -402,17 +654,6 @@ export function IssueModal(props: IssueModalProps) {
                     const v = parseInt(e.currentTarget.value, 10);
                     handleFieldUpdate('storyPoints', isNaN(v) ? null : v);
                   }}
-                />
-              </div>
-
-              {/* Due Date */}
-              <div>
-                <p class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Due Date</p>
-                <input
-                  type="date"
-                  class="w-full text-xs bg-white border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                  value={localIssue().dueDate?.slice(0, 10) ?? ''}
-                  onChange={(e) => handleFieldUpdate('dueDate', e.currentTarget.value)}
                 />
               </div>
 
@@ -431,6 +672,60 @@ export function IssueModal(props: IssueModalProps) {
           </div>
         </div>
       </div>
+
+      {/* Log Work Modal */}
+      <Modal
+        open={logWorkModalOpen()}
+        onClose={() => setLogWorkModalOpen(false)}
+        title="Log Work"
+        size="md"
+      >
+        <div class="px-6 py-5 space-y-4">
+          <Input
+            label="Time Spent (Hours) *"
+            type="number"
+            step="0.25"
+            min="0.25"
+            placeholder="e.g. 1.5, 2, 4"
+            value={logHours()}
+            onInput={(e) => setLogHours(e.currentTarget.value)}
+            fullWidth
+          />
+
+          <div>
+            <label class="text-xs font-semibold text-slate-600 uppercase tracking-wide block mb-1">
+              Date Worked
+            </label>
+            <input
+              type="date"
+              class="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-blue-500"
+              value={logDate()}
+              onChange={(e) => setLogDate(e.currentTarget.value)}
+            />
+          </div>
+
+          <div>
+            <label class="text-xs font-semibold text-slate-600 uppercase tracking-wide block mb-1">
+              Work Description (optional)
+            </label>
+            <textarea
+              class="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-blue-500 min-h-[80px]"
+              placeholder="What did you work on?"
+              value={logDescription()}
+              onInput={(e) => setLogDescription(e.currentTarget.value)}
+            />
+          </div>
+        </div>
+
+        <div class="px-6 py-4 border-t border-slate-200 flex justify-end gap-3 bg-slate-50/50 rounded-b-xl">
+          <Button variant="secondary" onClick={() => setLogWorkModalOpen(false)}>
+            Cancel
+          </Button>
+          <Button onClick={handleLogWork} loading={savingLog()}>
+            Log Time
+          </Button>
+        </div>
+      </Modal>
     </Portal>
   );
 }

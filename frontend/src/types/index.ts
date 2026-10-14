@@ -120,11 +120,28 @@ export interface Issue {
   labels?: Label[];
   subtasks?: Issue[];
   links?: IssueLink[];
-  attachments?: Attachment[];
+  startDate?: string;
   dueDate?: string;
+  estimatedHours?: number;
+  loggedHours?: number;
   position: number;       // ordering within column/sprint
   createdAt: string;
   updatedAt: string;
+}
+
+// ── WorkLog ───────────────────────────────────
+
+export interface WorkLog {
+  id: string;
+  hours: number;
+  loggedDate: string;
+  description?: string;
+  user?: {
+    id: string;
+    name: string;
+    email: string;
+  };
+  createdAt: string;
 }
 
 // ── Label ─────────────────────────────────────

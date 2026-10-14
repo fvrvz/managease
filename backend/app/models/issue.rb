@@ -17,6 +17,7 @@ class Issue < ApplicationRecord
   has_many :labels, through: :issue_labels
   has_many :outward_links, class_name: 'IssueLink', foreign_key: :source_id, dependent: :destroy
   has_many :inward_links, class_name: 'IssueLink', foreign_key: :target_id, dependent: :destroy
+  has_many :work_logs, dependent: :destroy
 
   # ── Enums ─────────────────────────────────────────────────────────────────────
   enum :issue_type, { story: 0, bug: 1, task: 2, subtask: 3 }, default: :task

@@ -1,4 +1,4 @@
-import { createSignal, Show, For, createMemo } from 'solid-js';
+import { createSignal, Show, For, createMemo, onMount } from 'solid-js';
 import {
   Play,
   CheckCircle2,
@@ -10,6 +10,8 @@ import {
   CheckSquare,
   Layers,
   Search,
+  X,
+  Calendar,
 } from 'lucide-solid';
 import {
   sprints,
@@ -21,12 +23,17 @@ import {
   moveIssueOptimistic,
   globalSearchQuery,
   setGlobalSearchQuery,
+  projectMembers,
+  fetchProjectMembers,
 } from '@/stores/project.store';
+import { user as currentUser } from '@/stores/auth.store';
 import { StatusBadge } from '@/components/issue/StatusBadge';
 import { PriorityBadge } from '@/components/issue/PriorityBadge';
 import { IssueModal } from '@/components/issue/IssueModal';
 import { IssueForm } from '@/components/issue/IssueForm';
 import { Avatar } from '@/components/ui/Avatar';
+import { Modal } from '@/components/ui/Modal';
+import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import type { Issue, Sprint, IssueType } from '@/types';
 
@@ -45,6 +52,20 @@ export function BacklogView(props: BacklogViewProps) {
   const [collapsedSprints, setCollapsedSprints] = createSignal<Record<string, boolean>>({});
   const [dragOverSprintId, setDragOverSprintId] = createSignal<string | null>(null);
   const [dragOverBacklog, setDragOverBacklog] = createSignal(false);
+  const [filterAssignee, setFilterAssignee] = createSignal<string | null>(null);
+
+  // Start Sprint Modal State
+  const [startSprintModal, setStartSprintModal] = createSignal<Sprint | null>(null);
+  const [modalSprintName, setModalSprintName] = createSignal('');
+  const [modalDuration, setModalDuration] = createSignal('2_weeks');
+  const [modalStartDate, setModalStartDate] = createSignal('');
+  const [modalEndDate, setModalEndDate] = createSignal('');
+  const [modalGoal, setModalGoal] = createSignal('');
+  const [startingSprint, setStartingSprint] = createSignal(false);
+
+  onMount(() => {
+    fetchProjectMembers(props.projectId);
+  });
 
   const toggleSprint = (sprintId: string) => {
     setCollapsedSprints((prev) => ({ ...prev, [sprintId]: !prev[sprintId] }));
@@ -56,12 +77,76 @@ export function BacklogView(props: BacklogViewProps) {
 
   const filterMatches = (i: Issue) => {
     const q = (globalSearchQuery() || '').toLowerCase().trim();
-    if (!q) return true;
-    return (
-      (i.title && i.title.toLowerCase().includes(q)) ||
-      (i.key && i.key.toLowerCase().includes(q)) ||
-      (i.description && i.description.toLowerCase().includes(q))
-    );
+    if (q) {
+      const matches =
+        (i.title && i.title.toLowerCase().includes(q)) ||
+        (i.key && i.key.toLowerCase().includes(q)) ||
+        (i.description && i.description.toLowerCase().includes(q));
+      if (!matches) return false;
+    }
+    if (filterAssignee() && String(i.assigneeId) !== String(filterAssignee())) {
+      return false;
+    }
+    return true;
+  };
+
+  const calculateEndDate = (startDateStr: string, duration: string) => {
+    if (duration === 'custom') return modalEndDate();
+    const start = startDateStr ? new Date(startDateStr) : new Date();
+    let days = 14;
+    if (duration === '1_week') days = 7;
+    else if (duration === '2_weeks') days = 14;
+    else if (duration === '3_weeks') days = 21;
+    else if (duration === '4_weeks') days = 28;
+    const end = new Date(start.getTime() + days * 86400000);
+    return end.toISOString().slice(0, 10);
+  };
+
+  const openStartSprintModal = (sprint: Sprint) => {
+    const now = new Date();
+    const startStr = sprint.startDate ? sprint.startDate.slice(0, 10) : now.toISOString().slice(0, 10);
+    const endStr = sprint.endDate ? sprint.endDate.slice(0, 10) : calculateEndDate(startStr, '2_weeks');
+
+    setModalSprintName(sprint.name);
+    setModalDuration('2_weeks');
+    setModalStartDate(startStr);
+    setModalEndDate(endStr);
+    setModalGoal(sprint.goal || '');
+    setStartSprintModal(sprint);
+  };
+
+  const handleDurationChange = (dur: string) => {
+    setModalDuration(dur);
+    if (dur !== 'custom') {
+      setModalEndDate(calculateEndDate(modalStartDate(), dur));
+    }
+  };
+
+  const handleStartDateChange = (dateStr: string) => {
+    setModalStartDate(dateStr);
+    if (modalDuration() !== 'custom') {
+      setModalEndDate(calculateEndDate(dateStr, modalDuration()));
+    }
+  };
+
+  const handleConfirmStartSprint = async () => {
+    const sprint = startSprintModal();
+    if (!sprint) return;
+    setStartingSprint(true);
+    try {
+      await startSprint(props.projectId, sprint.id, {
+        name: modalSprintName().trim() || sprint.name,
+        start_date: modalStartDate(),
+        end_date: modalEndDate(),
+        goal: modalGoal(),
+      });
+      toast.addToast(`Started sprint ${modalSprintName()}`, 'success');
+      setStartSprintModal(null);
+    } catch (err: any) {
+      toast.addToast(err?.response?.data?.error || 'Failed to start sprint', 'error');
+    } finally {
+      setStartingSprint(false);
+    }
   };
 
   const getSprintIssues = (sprintId: string) => {
@@ -156,16 +241,84 @@ export function BacklogView(props: BacklogViewProps) {
 
   return (
     <div class="space-y-6 pb-12">
-      {/* Search & Actions Bar */}
+      {/* Search & Actions Bar with Jira-style filters */}
       <div class="flex items-center justify-between gap-4 flex-wrap bg-white p-3 rounded-xl border border-slate-200">
-        <div class="relative w-72">
-          <Search class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            class="w-full pl-9 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 placeholder-slate-400 transition"
-            placeholder="Search backlog issues…"
-            value={globalSearchQuery()}
-            onInput={(e) => setGlobalSearchQuery(e.currentTarget.value)}
-          />
+        <div class="flex items-center gap-3 flex-wrap">
+          <div class="relative w-64">
+            <Search class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              class="w-full pl-9 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 placeholder-slate-400 transition"
+              placeholder="Search backlog issues…"
+              value={globalSearchQuery()}
+              onInput={(e) => setGlobalSearchQuery(e.currentTarget.value)}
+            />
+          </div>
+
+          {/* Jira-style User / Assignee Quick Filter */}
+          <div class="flex items-center gap-2 pl-2 border-l border-slate-200">
+            <button
+              type="button"
+              onClick={() => {
+                const myId = currentUser()?.id;
+                if (myId) {
+                  setFilterAssignee((prev) => (String(prev) === String(myId) ? null : String(myId)));
+                }
+              }}
+              class={`px-2.5 py-1 text-xs rounded-lg transition-colors border ${
+                String(filterAssignee()) === String(currentUser()?.id)
+                  ? 'bg-blue-50 text-blue-700 border-blue-300 font-semibold'
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              Only my issues
+            </button>
+
+            {/* Member Avatars */}
+            <div class="flex items-center -space-x-1.5 ml-1">
+              <For each={projectMembers}>
+                {(member) => {
+                  const isSelected = () => String(filterAssignee()) === String(member.id);
+                  return (
+                    <button
+                      type="button"
+                      title={member.name || member.email || 'Team Member'}
+                      onClick={() => {
+                        setFilterAssignee((prev) =>
+                          String(prev) === String(member.id) ? null : String(member.id)
+                        );
+                      }}
+                      class={`relative rounded-full transition-transform hover:z-10 hover:scale-105 ${
+                        isSelected()
+                          ? 'ring-2 ring-blue-600 ring-offset-2 z-10'
+                          : 'opacity-85 hover:opacity-100'
+                      }`}
+                    >
+                      <Avatar
+                        name={member.name || member.email}
+                        src={member.avatarUrl}
+                        size="sm"
+                        class="border-2 border-white shadow-xs"
+                      />
+                    </button>
+                  );
+                }}
+              </For>
+            </div>
+
+            <Show when={filterAssignee() || globalSearchQuery()}>
+              <button
+                type="button"
+                onClick={() => {
+                  setFilterAssignee(null);
+                  setGlobalSearchQuery('');
+                }}
+                class="text-xs text-slate-500 hover:text-slate-800 ml-1 flex items-center gap-1 hover:underline"
+              >
+                <X class="w-3 h-3" />
+                <span>Clear</span>
+              </button>
+            </Show>
+          </div>
         </div>
 
         <button
@@ -257,7 +410,7 @@ export function BacklogView(props: BacklogViewProps) {
                   {/* Actions */}
                   <Show when={sprint.status === 'planning'}>
                     <button
-                      onClick={() => startSprint(props.projectId, sprint.id)}
+                      onClick={() => openStartSprintModal(sprint)}
                       class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs transition shadow-xs"
                     >
                       <Play class="w-3.5 h-3.5 fill-white" />
@@ -532,6 +685,90 @@ export function BacklogView(props: BacklogViewProps) {
         sprintId={targetSprintId()}
         defaultStatus="todo"
       />
+
+      {/* Start Sprint Modal */}
+      <Show when={startSprintModal()}>
+        <Modal
+          open={!!startSprintModal()}
+          onClose={() => setStartSprintModal(null)}
+          title={`Start Sprint: ${startSprintModal()?.name}`}
+          size="md"
+        >
+          <div class="space-y-4 text-xs">
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">Sprint Name *</label>
+              <input
+                type="text"
+                class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                value={modalSprintName()}
+                onInput={(e) => setModalSprintName(e.currentTarget.value)}
+              />
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block font-semibold text-slate-700 mb-1">Duration</label>
+                <select
+                  class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
+                  value={modalDuration()}
+                  onChange={(e) => handleDurationChange(e.currentTarget.value)}
+                >
+                  <option value="1_week">1 week</option>
+                  <option value="2_weeks">2 weeks</option>
+                  <option value="3_weeks">3 weeks</option>
+                  <option value="4_weeks">4 weeks</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block font-semibold text-slate-700 mb-1">Start Date *</label>
+                <input
+                  type="date"
+                  class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500"
+                  value={modalStartDate()}
+                  onInput={(e) => handleStartDateChange(e.currentTarget.value)}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">End Date *</label>
+              <input
+                type="date"
+                class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500"
+                value={modalEndDate()}
+                disabled={modalDuration() !== 'custom'}
+                onInput={(e) => setModalEndDate(e.currentTarget.value)}
+              />
+            </div>
+
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">Sprint Goal</label>
+              <textarea
+                class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500 resize-none h-20"
+                placeholder="What is this sprint aiming to deliver?"
+                value={modalGoal()}
+                onInput={(e) => setModalGoal(e.currentTarget.value)}
+              />
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
+              <Button variant="secondary" size="sm" onClick={() => setStartSprintModal(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                loading={startingSprint()}
+                onClick={handleConfirmStartSprint}
+              >
+                Start Sprint
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      </Show>
     </div>
   );
 }
