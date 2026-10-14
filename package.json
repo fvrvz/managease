@@ -2,10 +2,12 @@
   "name": "managease",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "pnpm --filter frontend dev",
     "build": "pnpm --filter frontend build",
-    "preview": "pnpm --filter frontend preview"
+    "preview": "pnpm --filter frontend preview",
+    "prepare": "husky"
   },
   "engines": {
     "node": ">=20.0.0",
@@ -15,5 +17,10 @@
     "onlyBuiltDependencies": [
       "esbuild"
     ]
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^21.2.3",
+    "@commitlint/config-conventional": "^21.2.3",
+    "husky": "^9.1.7"
   }
 }

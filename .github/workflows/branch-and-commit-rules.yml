@@ -1,0 +1,62 @@
+name: Branch & Commit Conventions
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate-branch-name:
+    name: Validate Branch Name
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Branch Naming Convention
+        run: |
+          REF_NAME="${{ github.head_ref || github.ref_name }}"
+          echo "Evaluating branch: $REF_NAME"
+
+          PATTERN="^(main|dev|(feature|bugfix|hotfix|docs|refactor)\/([A-Za-z0-9]+-[0-9]+|[0-9]+)-[a-z0-9-]+)$"
+
+          if [[ "$REF_NAME" =~ $PATTERN ]]; then
+            echo "✅ Branch '$REF_NAME' matches the convention."
+            exit 0
+          else
+            echo "::error::Branch '$REF_NAME' violates the branch naming convention."
+            echo "Allowed formats:"
+            echo "  • feature/<ticket-number>-<description>"
+            echo "  • bugfix/<ticket-number>-<description>"
+            echo "  • hotfix/<ticket-number>-<description>"
+            echo "  • docs/<ticket-number>-<description>"
+            echo "  • refactor/<ticket-number>-<description>"
+            echo "  • main, dev"
+            exit 1
+          fi
+
+  validate-commit-messages:
+    name: Validate Commit Messages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile=false
+
+      - name: Validate PR Commits
+        if: github.event_name == 'pull_request'
+        run: |
+          pnpm commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
+
+      - name: Validate Push Commit
+        if: github.event_name == 'push' && github.ref != 'refs/heads/main'
+        run: |
+          pnpm commitlint --last --verbose

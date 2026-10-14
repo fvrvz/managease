@@ -1,0 +1,27 @@
+name: Main Branch Merge Gate
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  validate-source-branch:
+    name: Verify PR Source Branch for Main
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Source Branch
+        run: |
+          HEAD_BRANCH="${{ github.head_ref }}"
+          echo "PR target branch: ${{ github.base_ref }}"
+          echo "PR source branch: $HEAD_BRANCH"
+
+          if [ "$HEAD_BRANCH" = "dev" ] || [[ "$HEAD_BRANCH" =~ ^hotfix/ ]]; then
+            echo "✅ Source branch '$HEAD_BRANCH' is authorized to merge into 'main'."
+            exit 0
+          else
+            echo "::error::Direct merges into 'main' are strictly restricted to 'dev' or 'hotfix/*' branches."
+            echo "❌ '$HEAD_BRANCH' is not permitted to merge directly into 'main'."
+            echo "Please create a Pull Request targeting 'dev' first."
+            exit 1
+          fi
