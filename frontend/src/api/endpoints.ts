@@ -13,6 +13,8 @@ import type {
   VelocityPoint,
   IssueBreakdown,
   PaginatedResponse,
+  WorkflowData,
+  WorkflowStatus,
 } from '@/types';
 
 // ── Auth ──────────────────────────────────────
@@ -66,10 +68,10 @@ export const projectsApi = {
   getWorkflow: (projectId: string) =>
     apiClient.get(`/api/v1/projects/${projectId}/workflow`),
 
-  updateWorkflow: (projectId: string, data: any) =>
+  updateWorkflow: (projectId: string, data: WorkflowData | WorkflowStatus[]) =>
     apiClient.put(`/api/v1/projects/${projectId}/workflow`, {
       workflow_data: data,
-      workflow_statuses: Array.isArray(data) ? data : data?.statuses,
+      workflow_statuses: Array.isArray(data) ? data : (data as WorkflowData)?.statuses,
     }),
 
   updateGitHubSettings: (projectId: string, data: { github_repo?: string; github_webhook_secret?: string; github_token?: string }) =>
@@ -132,7 +134,7 @@ export const issuesApi = {
     apiClient.delete(`/api/v1/issues/${issueId}`),
 
   move: (projectId: string, issueId: string, status?: string, sprintId?: string | null) => {
-    const payload: Record<string, any> = {};
+    const payload: Record<string, string | null> = {};
     if (status !== undefined) payload.status = status;
     if (sprintId !== undefined) payload.sprint_id = sprintId;
     return apiClient.patch(`/api/v1/issues/${issueId}/move`, payload);
@@ -201,7 +203,7 @@ export const commentsApi = {
 
 export const reportsApi = {
   burndown: (projectId: string, sprintId: string) =>
-    apiClient.get<{ data: any; sprint: any }>(`/api/v1/projects/${projectId}/reports/burndown`, {
+    apiClient.get<{ data: Record<string, unknown>[]; sprint: Sprint }>(`/api/v1/projects/${projectId}/reports/burndown`, {
       params: { sprint_id: sprintId },
     }),
 
@@ -209,10 +211,10 @@ export const reportsApi = {
     apiClient.get<{ data: VelocityPoint[] }>(`/api/v1/projects/${projectId}/reports/velocity`),
 
   issueSummary: (projectId: string) =>
-    apiClient.get<{ data: any }>(`/api/v1/projects/${projectId}/reports/issue_summary`),
+    apiClient.get<{ data: Record<string, number> }>(`/api/v1/projects/${projectId}/reports/issue_summary`),
 
   timeTracking: (projectId: string, sprintId?: string) =>
-    apiClient.get<{ data: any }>(`/api/v1/projects/${projectId}/reports/time_tracking`, {
+    apiClient.get<{ data: Record<string, unknown>[] }>(`/api/v1/projects/${projectId}/reports/time_tracking`, {
       params: { sprint_id: sprintId },
     }),
 };

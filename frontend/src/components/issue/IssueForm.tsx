@@ -188,20 +188,20 @@ export function IssueForm(props: IssueFormProps) {
     setSaving(true);
     const pid = targetProjectId();
     try {
-      const data: any = {
+      const data: Partial<Issue> & Record<string, unknown> = {
         title: title().trim(),
         issue_type: type(),
         status: status() || 'todo',
         priority: priority(),
-        assignee_id: assigneeId() || null,
-        reporter_id: reporterId() || null,
+        assignee_id: assigneeId() || undefined,
+        reporter_id: reporterId() || undefined,
         description: description(),
-        sprint_id: sprintId() || null,
-        epic_id: epicId() || null,
-        story_points: storyPoints() ? parseInt(storyPoints(), 10) : null,
-        start_date: startDate() || null,
-        due_date: dueDate() || null,
-        estimated_hours: estimatedHours() ? parseFloat(estimatedHours()) : null,
+        sprint_id: sprintId() || undefined,
+        epic_id: epicId() || undefined,
+        story_points: storyPoints() ? parseInt(storyPoints(), 10) : undefined,
+        start_date: startDate() || undefined,
+        due_date: dueDate() || undefined,
+        estimated_hours: estimatedHours() ? parseFloat(estimatedHours()) : undefined,
       };
 
       let saved: Issue;
@@ -214,10 +214,11 @@ export function IssueForm(props: IssueFormProps) {
       toast.addToast(`Issue ${isEdit() ? 'updated' : 'created'} successfully`, 'success');
       props.onSaved?.(saved);
       props.onClose();
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { details?: string[]; error?: string } } };
       const msg =
-        err?.response?.data?.details?.join(', ') ||
-        err?.response?.data?.error ||
+        axiosErr?.response?.data?.details?.join(', ') ||
+        axiosErr?.response?.data?.error ||
         `Failed to ${isEdit() ? 'update' : 'create'} issue`;
       toast.addToast(msg, 'error');
     } finally {

@@ -21,7 +21,7 @@ export function ImportPage() {
 
   const [selectedFile, setSelectedFile] = createSignal<File | null>(null);
   const [previewHeaders, setPreviewHeaders] = createSignal<string[]>([]);
-  const [previewRows, setPreviewRows] = createSignal<any[]>([]);
+  const [previewRows, setPreviewRows] = createSignal<Record<string, string>[]>([]);
   const [uploading, setUploading] = createSignal(false);
   const [importResult, setImportResult] = createSignal<{ success: boolean; count?: number; errors?: string[] } | null>(null);
 
@@ -50,10 +50,10 @@ export function ImportPage() {
         const workbook = XLSX.read(data, { type: 'array' });
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
-        const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+        const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as unknown[][];
 
         if (json.length > 0) {
-          const headers = (json[0] || []).map((h: any) => String(h || '').trim());
+          const headers = (json[0] || []).map((h) => String(h ?? '').trim());
           const rows = json.slice(1, 6).map((row) => {
             const obj: Record<string, string> = {};
             headers.forEach((h, idx) => {
@@ -80,10 +80,11 @@ export function ImportPage() {
     setUploading(true);
     try {
       const res = await importsApi.uploadExcel(proj.id, file);
-      const data = res.data as any;
+      const data = res.data as Record<string, unknown>;
+      const importedObj = data?.imported as Record<string, unknown> | undefined;
       setImportResult({
         success: true,
-        count: data?.imported?.issues_count ?? previewRows().length,
+        count: Number(importedObj?.issues_count) || previewRows().length,
       });
       toast.addToast('Plan spreadsheet imported successfully!', 'success');
       // Refresh project data
@@ -92,8 +93,9 @@ export function ImportPage() {
         fetchSprints(proj.id),
         fetchEpics(proj.id),
       ]);
-    } catch (err: any) {
-      const msg = err?.response?.data?.error || err?.response?.data?.details?.join(', ') || 'Import failed';
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string; details?: string[] } } };
+      const msg = axiosErr?.response?.data?.error || axiosErr?.response?.data?.details?.join(', ') || 'Import failed';
       setImportResult({
         success: false,
         errors: [msg],

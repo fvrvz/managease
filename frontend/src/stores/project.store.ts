@@ -4,9 +4,11 @@ import { projectsApi, sprintsApi, issuesApi, epicsApi, labelsApi } from '@/api/e
 import type { Project, Sprint, Epic, Issue, Label, IssueStatus, User } from '@/types';
 
 // Helper to normalize JSONAPI response or plain response
-const normalizeItem = (item: any) => {
-  if (!item) return item;
-  const obj = item.attributes ? { id: item.id, ...item.attributes } : { ...item };
+const normalizeItem = (item: unknown): unknown => {
+  if (!item || typeof item !== 'object') return item;
+  const raw = item as Record<string, unknown>;
+  const attrs = raw.attributes && typeof raw.attributes === 'object' ? (raw.attributes as Record<string, unknown>) : null;
+  const obj: Record<string, unknown> = attrs ? { id: raw.id, ...attrs } : { ...raw };
   if (obj.issue_key !== undefined && obj.key === undefined) obj.key = obj.issue_key;
   if (obj.issueKey !== undefined && obj.key === undefined) obj.key = obj.issueKey;
   if (obj.member_count !== undefined && obj.memberCount === undefined) obj.memberCount = obj.member_count;
@@ -19,9 +21,10 @@ const normalizeItem = (item: any) => {
   if (obj.story_points !== undefined && obj.storyPoints === undefined) obj.storyPoints = obj.story_points;
   if (obj.issue_type !== undefined && obj.type === undefined) obj.type = obj.issue_type;
   if (obj.workflow_statuses !== undefined && obj.workflowStatuses === undefined) {
-    if (!Array.isArray(obj.workflow_statuses) && obj.workflow_statuses?.statuses) {
-      obj.workflowData = obj.workflow_statuses;
-      obj.workflowStatuses = obj.workflow_statuses.statuses;
+    const ws = obj.workflow_statuses as Record<string, unknown>;
+    if (!Array.isArray(obj.workflow_statuses) && ws?.statuses) {
+      obj.workflowData = ws;
+      obj.workflowStatuses = ws.statuses;
     } else {
       obj.workflowStatuses = obj.workflow_statuses;
     }
@@ -34,16 +37,18 @@ const normalizeItem = (item: any) => {
   return obj;
 };
 
-const extractData = <T>(resData: any): T[] => {
-  if (Array.isArray(resData)) return resData.map(normalizeItem);
-  if (Array.isArray(resData?.data)) {
-    return resData.data.map(normalizeItem);
+const extractData = <T>(resData: unknown): T[] => {
+  if (Array.isArray(resData)) return resData.map(normalizeItem) as T[];
+  if (resData && typeof resData === 'object' && Array.isArray((resData as Record<string, unknown>).data)) {
+    return ((resData as Record<string, unknown>).data as unknown[]).map(normalizeItem) as T[];
   }
   return [];
 };
 
-const extractSingle = <T>(resData: any): T => {
-  if (resData?.data) return normalizeItem(resData.data) as T;
+const extractSingle = <T>(resData: unknown): T => {
+  if (resData && typeof resData === 'object' && (resData as Record<string, unknown>).data) {
+    return normalizeItem((resData as Record<string, unknown>).data) as T;
+  }
   return normalizeItem(resData) as T;
 };
 
@@ -288,10 +293,13 @@ export const deleteLabel = async (projectId: string, labelId: string): Promise<v
 export const fetchProjectMembers = async (projectId: string): Promise<void> => {
   try {
     const res = await projectsApi.getMembers(projectId);
-    const membersData = (res.data as any) || [];
-    const users = membersData.map((m: any) =>
-      m.user?.attributes ? { id: m.user.id, ...m.user.attributes } : (m.user || m)
-    );
+    const membersData = (Array.isArray(res.data) ? res.data : []) as unknown[];
+    const users = membersData.map((m: unknown) => {
+      const rec = m as Record<string, unknown>;
+      const userObj = rec.user && typeof rec.user === 'object' ? (rec.user as Record<string, unknown>) : rec;
+      const attrs = userObj.attributes && typeof userObj.attributes === 'object' ? (userObj.attributes as Record<string, unknown>) : null;
+      return (attrs ? { id: userObj.id, ...attrs } : userObj) as unknown as User;
+    });
     setProjectMembers(users);
   } catch (e) {
     console.error('Failed to load project members', e);

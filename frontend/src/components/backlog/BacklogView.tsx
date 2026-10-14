@@ -142,8 +142,9 @@ export function BacklogView(props: BacklogViewProps) {
       });
       toast.addToast(`Started sprint ${modalSprintName()}`, 'success');
       setStartSprintModal(null);
-    } catch (err: any) {
-      toast.addToast(err?.response?.data?.error || 'Failed to start sprint', 'error');
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      toast.addToast(axiosErr?.response?.data?.error || 'Failed to start sprint', 'error');
     } finally {
       setStartingSprint(false);
     }

@@ -42,13 +42,17 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response) => {
     // 1. Capture token from JSON response body
-    const bodyToken = (response.data as any)?.token || (response.data as any)?.tokens?.accessToken;
+    const dataObj = response.data && typeof response.data === 'object' ? (response.data as Record<string, unknown>) : null;
+    const bodyToken = (typeof dataObj?.token === 'string' ? dataObj.token : null) ||
+      (dataObj?.tokens && typeof dataObj.tokens === 'object' && typeof (dataObj.tokens as Record<string, unknown>).accessToken === 'string'
+        ? ((dataObj.tokens as Record<string, unknown>).accessToken as string)
+        : null);
     if (bodyToken) {
       setToken(bodyToken);
     }
     // 2. Devise-jwt returns Authorization header on login/register
-    const headers = response.headers as any;
-    const authHeader = headers?.['authorization'] || (typeof headers?.get === 'function' ? headers.get('authorization') : null);
+    const headers = response.headers as Record<string, unknown>;
+    const authHeader = headers?.['authorization'] || (typeof (headers as { get?: (k: string) => unknown })?.get === 'function' ? (headers as { get: (k: string) => unknown }).get('authorization') : null);
     if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
       const token = authHeader.substring(7);
       setToken(token);

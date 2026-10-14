@@ -76,15 +76,16 @@ export function SettingsPage() {
     if (!proj) return;
     try {
       const res = await projectsApi.getMembers(proj.id);
-      const data = (res.data as any) || [];
-      const parsed: ProjectMemberInfo[] = data.map((item: any) => {
-        const u = item.user?.attributes
-          ? { id: item.user.id, ...item.user.attributes }
-          : item.user || item;
+      const data = (Array.isArray(res.data) ? res.data : []) as unknown[];
+      const parsed: ProjectMemberInfo[] = data.map((item: unknown) => {
+        const rec = item as Record<string, unknown>;
+        const userObj = rec.user && typeof rec.user === 'object' ? (rec.user as Record<string, unknown>) : rec;
+        const attrs = userObj.attributes && typeof userObj.attributes === 'object' ? (userObj.attributes as Record<string, unknown>) : null;
+        const u = (attrs ? { id: userObj.id, ...attrs } : userObj) as unknown as User;
         return {
           user: u,
-          role: item.role || 'member',
-          joined_at: item.joined_at,
+          role: (typeof rec.role === 'string' ? rec.role : 'member') as ProjectMemberInfo['role'],
+          joined_at: String(rec.joined_at || ''),
         };
       });
       setMembersList(parsed);
@@ -97,11 +98,13 @@ export function SettingsPage() {
   const loadAllUsers = async () => {
     try {
       const res = await usersApi.list();
-      const raw = res.data as any;
-      const list = Array.isArray(raw) ? raw : (raw?.data || []);
-      const parsed = list.map((item: any) =>
-        item.attributes ? { id: item.id, ...item.attributes } : item,
-      );
+      const raw = res.data as unknown as Record<string, unknown>;
+      const list = Array.isArray(raw) ? (raw as unknown[]) : Array.isArray(raw?.data) ? (raw.data as unknown[]) : [];
+      const parsed: User[] = list.map((item: unknown) => {
+        const rec = item as Record<string, unknown>;
+        const attrs = rec.attributes && typeof rec.attributes === 'object' ? (rec.attributes as Record<string, unknown>) : null;
+        return (attrs ? { id: rec.id, ...attrs } : rec) as unknown as User;
+      });
       setAllUsers(parsed);
       if (parsed.length > 0 && !selectedAddUserId()) {
         setSelectedAddUserId(String(parsed[0].id));
@@ -221,8 +224,9 @@ export function SettingsPage() {
       await projectsApi.addMember(proj.id, uid, selectedAddRole());
       toast.addToast('Member added to project', 'success');
       await loadMembers();
-    } catch (err: any) {
-      toast.addToast(err?.response?.data?.error || 'Failed to add member', 'error');
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      toast.addToast(axiosErr?.response?.data?.error || 'Failed to add member', 'error');
     } finally {
       setAddingMember(false);
     }
@@ -265,7 +269,7 @@ export function SettingsPage() {
         name: newUserName().trim() || newUserEmail().split('@')[0],
         email: newUserEmail().trim(),
         password: newUserPassword(),
-        role: newUserRole() as any,
+        role: newUserRole() as User['role'],
       });
       toast.addToast('User created successfully', 'success');
       setShowCreateUserModal(false);
@@ -273,8 +277,9 @@ export function SettingsPage() {
       setNewUserEmail('');
       setNewUserPassword('');
       await loadAllUsers();
-    } catch (err: any) {
-      toast.addToast(err?.response?.data?.error || 'Failed to create user', 'error');
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      toast.addToast(axiosErr?.response?.data?.error || 'Failed to create user', 'error');
     } finally {
       setCreatingUser(false);
     }
