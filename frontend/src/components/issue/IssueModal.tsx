@@ -27,6 +27,7 @@ import {
   assignIssue,
   projectMembers,
   fetchProjectMembers,
+  isTransitionAllowed,
 } from '@/stores/project.store';
 import { user } from '@/stores/auth.store';
 import { useToast } from '@/components/ui/Toast';
@@ -136,15 +137,23 @@ export function IssueModal(props: IssueModalProps) {
 
   const handleFieldUpdate = async (field: keyof Issue, value: unknown) => {
     const prev = localIssue();
+    if (field === 'status') {
+      const newStatus = String(value);
+      if (!isTransitionAllowed(prev.status, newStatus)) {
+        toast.addToast(`Workflow restriction: Transition from '${prev.status}' to '${newStatus}' is not permitted by project workflow.`, 'error');
+        return;
+      }
+    }
     setLocalIssue({ ...prev, [field]: value } as Issue);
     try {
       const payloadKey =
         field === 'startDate' ? 'start_date' : field === 'dueDate' ? 'due_date' : field;
       await updateIssue(prev.projectId, prev.id, { [payloadKey]: value });
       props.onUpdated?.({ ...prev, [field]: value } as Issue);
-    } catch {
+    } catch (err: any) {
       setLocalIssue(prev);
-      toast.addToast('Failed to update issue', 'error');
+      const msg = err?.response?.data?.error || 'Failed to update issue';
+      toast.addToast(msg, 'error');
     }
   };
 

@@ -32,6 +32,10 @@ class ProjectSerializer
     project.configured_workflow
   end
 
+  attribute :workflow_data do |project|
+    project.workflow_data
+  end
+
   attribute :github_repo do |project|
     project.try(:github_repo)
   end

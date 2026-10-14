@@ -66,8 +66,11 @@ export const projectsApi = {
   getWorkflow: (projectId: string) =>
     apiClient.get(`/api/v1/projects/${projectId}/workflow`),
 
-  updateWorkflow: (projectId: string, statuses: any[]) =>
-    apiClient.put(`/api/v1/projects/${projectId}/workflow`, { workflow_statuses: statuses }),
+  updateWorkflow: (projectId: string, data: any) =>
+    apiClient.put(`/api/v1/projects/${projectId}/workflow`, {
+      workflow_data: data,
+      workflow_statuses: Array.isArray(data) ? data : data?.statuses,
+    }),
 
   updateGitHubSettings: (projectId: string, data: { github_repo?: string; github_webhook_secret?: string; github_token?: string }) =>
     apiClient.put(`/api/v1/projects/${projectId}/github_settings`, data),

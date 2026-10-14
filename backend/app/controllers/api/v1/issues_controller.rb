@@ -39,6 +39,18 @@ module Api
       def update
         authorize @issue
 
+        new_status = issue_params[:status].presence
+        if new_status.present? && new_status.to_s != @issue.status.to_s
+          unless @issue.project.allowed_transition?(@issue.status, new_status)
+            render json: {
+              error: "Workflow restriction: Transition from '#{@issue.status.to_s.titleize}' to '#{new_status.to_s.titleize}' is not permitted by project workflow.",
+              from: @issue.status,
+              to: new_status
+            }, status: :unprocessable_entity
+            return
+          end
+        end
+
         if @issue.update(issue_params)
           render_serialized(IssueSerializer, @issue, include: ALLOWED_INCLUDES)
         else
@@ -65,6 +77,17 @@ module Api
                         end
 
         status_val = params[:status].presence
+        if status_val.present? && status_val.to_s != @issue.status.to_s
+          unless @issue.project.allowed_transition?(@issue.status, status_val)
+            render json: {
+              error: "Workflow restriction: Transition from '#{@issue.status.to_s.titleize}' to '#{status_val.to_s.titleize}' is not permitted by project workflow.",
+              from: @issue.status,
+              to: status_val
+            }, status: :unprocessable_entity
+            return
+          end
+        end
+
         @issue.move_to_sprint(target_sprint, status: status_val)
         render_serialized(IssueSerializer, @issue, include: ALLOWED_INCLUDES)
       rescue ActiveRecord::RecordInvalid => e

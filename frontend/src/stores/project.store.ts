@@ -18,7 +18,15 @@ const normalizeItem = (item: any) => {
   if (obj.assignee_id !== undefined && obj.assigneeId === undefined) obj.assigneeId = obj.assignee_id;
   if (obj.story_points !== undefined && obj.storyPoints === undefined) obj.storyPoints = obj.story_points;
   if (obj.issue_type !== undefined && obj.type === undefined) obj.type = obj.issue_type;
-  if (obj.workflow_statuses !== undefined && obj.workflowStatuses === undefined) obj.workflowStatuses = obj.workflow_statuses;
+  if (obj.workflow_statuses !== undefined && obj.workflowStatuses === undefined) {
+    if (!Array.isArray(obj.workflow_statuses) && obj.workflow_statuses?.statuses) {
+      obj.workflowData = obj.workflow_statuses;
+      obj.workflowStatuses = obj.workflow_statuses.statuses;
+    } else {
+      obj.workflowStatuses = obj.workflow_statuses;
+    }
+  }
+  if (obj.workflow_data !== undefined && obj.workflowData === undefined) obj.workflowData = obj.workflow_data;
   if (obj.github_repo !== undefined && obj.githubRepo === undefined) obj.githubRepo = obj.github_repo;
   if (obj.start_date !== undefined && obj.startDate === undefined) obj.startDate = obj.start_date;
   if (obj.estimated_hours !== undefined && obj.estimatedHours === undefined) obj.estimatedHours = obj.estimated_hours;
@@ -299,5 +307,22 @@ export const assignIssue = async (issueId: string, assigneeId: string | null): P
       issue.assigneeId = assigneeId || undefined;
       issue.assignee = assigneeObj || undefined;
     }),
+  );
+};
+
+export const isTransitionAllowed = (fromStatus: string, toStatus: string): boolean => {
+  if (!fromStatus || !toStatus || fromStatus === toStatus) return true;
+  const proj = currentProject();
+  if (!proj) return true;
+
+  const wData = proj.workflowData;
+  if (!wData) return true;
+  if (wData.strict === false) return true;
+
+  const transitions = wData.transitions;
+  if (!transitions || transitions.length === 0) return true;
+
+  return transitions.some(
+    (t) => (t.from === fromStatus || t.from === '*') && t.to === toStatus,
   );
 };

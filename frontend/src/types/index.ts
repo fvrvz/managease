@@ -28,6 +28,21 @@ export interface WorkflowStatus {
   color: string;
   position?: number;
   description?: string;
+  x?: number;
+  y?: number;
+}
+
+export interface WorkflowTransition {
+  id: string;
+  from: string;
+  to: string;
+  name?: string;
+}
+
+export interface WorkflowData {
+  statuses: WorkflowStatus[];
+  transitions: WorkflowTransition[];
+  strict?: boolean;
 }
 
 export interface Project {
@@ -42,6 +57,7 @@ export interface Project {
   members?: ProjectMember[];
   issueCount?: number;
   workflowStatuses?: WorkflowStatus[];
+  workflowData?: WorkflowData;
   githubRepo?: string;
   githubWebhookSecret?: string;
   createdAt: string;

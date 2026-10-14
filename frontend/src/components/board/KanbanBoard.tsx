@@ -16,6 +16,7 @@ import {
   currentProject,
   projectMembers,
   fetchProjectMembers,
+  isTransitionAllowed,
 } from '@/stores/project.store';
 import { user as currentUser } from '@/stores/auth.store';
 import type { Issue, IssueStatus, Sprint, WorkflowStatus } from '@/types';
@@ -120,10 +121,19 @@ export function KanbanBoard(props: KanbanBoardProps) {
   const handleDrop = async (issueId: string, newStatus: IssueStatus) => {
     const issue = issues.find((i) => String(i.id) === String(issueId));
     if (!issue || issue.status === newStatus) return;
+
+    if (!isTransitionAllowed(issue.status, newStatus)) {
+      const fromCol = columns().find((c) => c.id === issue.status)?.title || issue.status;
+      const toCol = columns().find((c) => c.id === newStatus)?.title || newStatus;
+      toast.addToast(`Workflow restriction: Transition from '${fromCol}' to '${toCol}' is not permitted by project workflow.`, 'error');
+      return;
+    }
+
     try {
       await moveIssueOptimistic(props.projectId, issueId, newStatus, activeSprint()?.id);
-    } catch {
-      toast.addToast('Failed to move issue', 'error');
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || 'Failed to move issue';
+      toast.addToast(msg, 'error');
     }
   };
 

@@ -1,17 +1,22 @@
-import { createSignal, createEffect, For, Show } from 'solid-js';
+import { createSignal, createEffect, onMount, For, Show } from 'solid-js';
 import { useParams } from '@solidjs/router';
 import {
   GitFork,
   Plus,
   ArrowRight,
-  MoveLeft,
-  MoveRight,
   Trash2,
   CheckCircle2,
-  Layers,
   Sparkles,
   Info,
   Check,
+  RotateCcw,
+  ShieldCheck,
+  Save,
+  Link as LinkIcon,
+  MousePointer,
+  HelpCircle,
+  Move,
+  X,
 } from 'lucide-solid';
 import { currentProject, updateProject } from '@/stores/project.store';
 import { projectsApi } from '@/api/endpoints';
@@ -20,13 +25,25 @@ import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { RichSelect, RichSelectOption } from '@/components/ui/RichSelect';
-import type { WorkflowStatus } from '@/types';
+import type { WorkflowStatus, WorkflowTransition, WorkflowData } from '@/types';
 
-const DEFAULT_WORKFLOW: WorkflowStatus[] = [
-  { id: 'todo', title: 'To Do', category: 'todo', color: '#94a3b8', description: 'Work ready to be picked up' },
-  { id: 'in_progress', title: 'In Progress', category: 'in_progress', color: '#3b82f6', description: 'Actively being worked on' },
-  { id: 'in_review', title: 'In Review', category: 'in_progress', color: '#8b5cf6', description: 'Code review or QA testing' },
-  { id: 'done', title: 'Done', category: 'done', color: '#22c55e', description: 'Completed and verified' },
+const NODE_WIDTH = 220;
+const NODE_HEIGHT = 100;
+
+const DEFAULT_WORKFLOW_STATUSES: WorkflowStatus[] = [
+  { id: 'todo', title: 'To Do', category: 'todo', color: '#94a3b8', x: 60, y: 160, description: 'Work ready to be started' },
+  { id: 'in_progress', title: 'In Progress', category: 'in_progress', color: '#3b82f6', x: 360, y: 160, description: 'Actively being developed' },
+  { id: 'in_review', title: 'In Review', category: 'in_progress', color: '#8b5cf6', x: 660, y: 160, description: 'Code review or QA' },
+  { id: 'done', title: 'Done', category: 'done', color: '#22c55e', x: 960, y: 160, description: 'Completed and verified' },
+];
+
+const DEFAULT_TRANSITIONS: WorkflowTransition[] = [
+  { id: 't1', from: 'todo', to: 'in_progress', name: 'Start Work' },
+  { id: 't2', from: 'in_progress', to: 'in_review', name: 'Submit for Review' },
+  { id: 't3', from: 'in_review', to: 'done', name: 'Approve & Done' },
+  { id: 't4', from: 'in_review', to: 'in_progress', name: 'Request Changes' },
+  { id: 't5', from: 'in_progress', to: 'todo', name: 'Stop Work' },
+  { id: 't6', from: 'done', to: 'todo', name: 'Reopen' },
 ];
 
 const categoryOptions: RichSelectOption[] = [
@@ -49,161 +66,513 @@ const colorPresets = [
 export function WorkflowPage() {
   const params = useParams();
   const toast = useToast();
-  const [statuses, setStatuses] = createSignal<WorkflowStatus[]>(DEFAULT_WORKFLOW);
-  const [addModalOpen, setAddModalOpen] = createSignal(false);
+
+  const [statuses, setStatuses] = createSignal<WorkflowStatus[]>(DEFAULT_WORKFLOW_STATUSES);
+  const [transitions, setTransitions] = createSignal<WorkflowTransition[]>(DEFAULT_TRANSITIONS);
+  const [strict, setStrict] = createSignal(true);
+  const [saving, setSaving] = createSignal(false);
+
+  // Dragging node state
+  const [draggingNodeId, setDraggingNodeId] = createSignal<string | null>(null);
+  const [dragOffset, setDragOffset] = createSignal<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // Add Status Modal
+  const [addStatusOpen, setAddStatusOpen] = createSignal(false);
   const [newTitle, setNewTitle] = createSignal('');
   const [newCategory, setNewCategory] = createSignal<'todo' | 'in_progress' | 'done'>('in_progress');
   const [newColor, setNewColor] = createSignal('#3b82f6');
   const [newDescription, setNewDescription] = createSignal('');
-  const [saving, setSaving] = createSignal(false);
 
+  // Add Transition Modal
+  const [addTransitionOpen, setAddTransitionOpen] = createSignal(false);
+  const [transitionFrom, setTransitionFrom] = createSignal('');
+  const [transitionTo, setTransitionTo] = createSignal('');
+  const [transitionName, setTransitionName] = createSignal('');
+
+  // Interactive link mode
+  const [linkingFromId, setLinkingFromId] = createSignal<string | null>(null);
+
+  // Initialize from project
   createEffect(() => {
     const proj = currentProject();
-    if (proj?.workflowStatuses && proj.workflowStatuses.length > 0) {
-      setStatuses(proj.workflowStatuses);
-    } else {
-      setStatuses(DEFAULT_WORKFLOW);
+    if (proj) {
+      const wData = proj.workflowData;
+      if (wData && wData.statuses && wData.statuses.length > 0) {
+        setStatuses(
+          wData.statuses.map((s, idx) => ({
+            ...s,
+            x: s.x !== undefined ? s.x : 60 + idx * 300,
+            y: s.y !== undefined ? s.y : 160,
+          })),
+        );
+        if (wData.transitions && wData.transitions.length > 0) {
+          setTransitions(wData.transitions);
+        } else {
+          setTransitions(DEFAULT_TRANSITIONS);
+        }
+        setStrict(wData.strict !== false);
+      } else if (proj.workflowStatuses && proj.workflowStatuses.length > 0) {
+        setStatuses(
+          proj.workflowStatuses.map((s, idx) => ({
+            ...s,
+            x: s.x !== undefined ? s.x : 60 + idx * 300,
+            y: s.y !== undefined ? s.y : 160,
+          })),
+        );
+        setTransitions(DEFAULT_TRANSITIONS);
+        setStrict(true);
+      }
     }
   });
 
-  const handleSave = async (updatedList?: WorkflowStatus[]) => {
-    const listToSave = updatedList || statuses();
+  const handleSave = async (override?: {
+    statuses?: WorkflowStatus[];
+    transitions?: WorkflowTransition[];
+    strict?: boolean;
+  }) => {
     const proj = currentProject();
     if (!proj) return;
     setSaving(true);
+    const dataToSave: WorkflowData = {
+      statuses: override?.statuses || statuses(),
+      transitions: override?.transitions || transitions(),
+      strict: override?.strict !== undefined ? override.strict : strict(),
+    };
     try {
-      await projectsApi.updateWorkflow(proj.id, listToSave);
-      await updateProject(proj.id, { workflowStatuses: listToSave });
-      toast.addToast('Workflow statuses saved successfully', 'success');
+      await projectsApi.updateWorkflow(proj.id, dataToSave);
+      await updateProject(proj.id, {
+        workflowStatuses: dataToSave.statuses,
+        workflowData: dataToSave,
+      });
+      toast.addToast('Workflow configuration saved', 'success');
     } catch {
-      toast.addToast('Failed to save workflow changes', 'error');
+      toast.addToast('Failed to save workflow', 'error');
     } finally {
       setSaving(false);
     }
   };
 
+  // Node Dragging Handlers
+  const handleNodeMouseDown = (e: MouseEvent, statusId: string) => {
+    e.stopPropagation();
+    const node = statuses().find((s) => s.id === statusId);
+    if (!node) return;
+    setDraggingNodeId(statusId);
+    setDragOffset({
+      x: e.clientX - (node.x || 0),
+      y: e.clientY - (node.y || 0),
+    });
+  };
+
+  const handleCanvasMouseMove = (e: MouseEvent) => {
+    const id = draggingNodeId();
+    if (!id) return;
+    const offset = dragOffset();
+    const newX = Math.max(20, Math.min(1400, e.clientX - offset.x));
+    const newY = Math.max(20, Math.min(700, e.clientY - offset.y));
+
+    setStatuses((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, x: newX, y: newY } : s)),
+    );
+  };
+
+  const handleCanvasMouseUp = () => {
+    if (draggingNodeId()) {
+      setDraggingNodeId(null);
+      handleSave();
+    }
+  };
+
+  // Status Management
   const handleAddStatus = async () => {
     if (!newTitle().trim()) return;
     const slug = newTitle()
       .trim()
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '_');
+    const existing = statuses();
+    const lastX = existing.length > 0 ? (existing[existing.length - 1].x || 60) + 280 : 60;
     const newStatus: WorkflowStatus = {
       id: slug,
       title: newTitle().trim(),
       category: newCategory(),
       color: newColor(),
       description: newDescription().trim() || undefined,
+      x: lastX,
+      y: 160,
     };
-    const updated = [...statuses(), newStatus];
+    const updated = [...existing, newStatus];
     setStatuses(updated);
-    setAddModalOpen(false);
+    setAddStatusOpen(false);
     setNewTitle('');
     setNewDescription('');
-    await handleSave(updated);
+    await handleSave({ statuses: updated });
   };
 
-  const moveStatus = (index: number, direction: 'left' | 'right') => {
-    const list = [...statuses()];
-    const targetIndex = direction === 'left' ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= list.length) return;
-    const temp = list[index];
-    list[index] = list[targetIndex];
-    list[targetIndex] = temp;
-    setStatuses(list);
-    handleSave(list);
-  };
-
-  const removeStatus = (index: number) => {
+  const handleDeleteStatus = async (statusId: string) => {
     if (statuses().length <= 2) {
-      toast.addToast('Workflow must have at least 2 statuses', 'error');
+      toast.addToast('Workflow must retain at least 2 statuses', 'error');
       return;
     }
-    const list = statuses().filter((_, i) => i !== index);
-    setStatuses(list);
-    handleSave(list);
+    const updatedStatuses = statuses().filter((s) => s.id !== statusId);
+    const updatedTransitions = transitions().filter(
+      (t) => t.from !== statusId && t.to !== statusId,
+    );
+    setStatuses(updatedStatuses);
+    setTransitions(updatedTransitions);
+    await handleSave({ statuses: updatedStatuses, transitions: updatedTransitions });
+  };
+
+  // Transition Management
+  const openLinkFrom = (statusId: string) => {
+    setLinkingFromId(statusId);
+    setTransitionFrom(statusId);
+    const target = statuses().find((s) => s.id !== statusId);
+    setTransitionTo(target ? target.id : '');
+    setTransitionName('');
+    setAddTransitionOpen(true);
+  };
+
+  const handleSaveTransition = async () => {
+    const from = transitionFrom();
+    const to = transitionTo();
+    if (!from || !to) {
+      toast.addToast('Please select both from and to statuses', 'error');
+      return;
+    }
+    if (from === to) {
+      toast.addToast('Cannot create a transition from a status to itself', 'error');
+      return;
+    }
+    const exists = transitions().some((t) => t.from === from && t.to === to);
+    if (exists) {
+      toast.addToast('This transition arrow already exists', 'error');
+      return;
+    }
+
+    const fromTitle = statuses().find((s) => s.id === from)?.title || from;
+    const toTitle = statuses().find((s) => s.id === to)?.title || to;
+    const name = transitionName().trim() || `Move to ${toTitle}`;
+
+    const newTrans: WorkflowTransition = {
+      id: `t_${Date.now()}`,
+      from,
+      to,
+      name,
+    };
+
+    const updated = [...transitions(), newTrans];
+    setTransitions(updated);
+    setAddTransitionOpen(false);
+    setLinkingFromId(null);
+    setTransitionName('');
+    toast.addToast(`Created transition: ${fromTitle} ➔ ${toTitle}`, 'success');
+    await handleSave({ transitions: updated });
+  };
+
+  const handleDeleteTransition = async (transitionId: string) => {
+    const updated = transitions().filter((t) => t.id !== transitionId);
+    setTransitions(updated);
+    await handleSave({ transitions: updated });
+    toast.addToast('Transition removed', 'info');
+  };
+
+  const handleAutoLayout = () => {
+    const ordered = [...statuses()];
+    const updated = ordered.map((s, idx) => ({
+      ...s,
+      x: 60 + idx * 300,
+      y: 180,
+    }));
+    setStatuses(updated);
+    handleSave({ statuses: updated });
+    toast.addToast('Auto-arranged workflow nodes', 'info');
+  };
+
+  const handleResetToDefault = () => {
+    if (!confirm('Reset workflow to standard Agile Scrum/Kanban template?')) return;
+    setStatuses(DEFAULT_WORKFLOW_STATUSES);
+    setTransitions(DEFAULT_TRANSITIONS);
+    setStrict(true);
+    handleSave({
+      statuses: DEFAULT_WORKFLOW_STATUSES,
+      transitions: DEFAULT_TRANSITIONS,
+      strict: true,
+    });
+    toast.addToast('Reset to default Agile workflow', 'success');
+  };
+
+  // Helper to compute SVG arrow paths
+  const getPathForTransition = (t: WorkflowTransition) => {
+    const fromNode = statuses().find((s) => s.id === t.from);
+    const toNode = statuses().find((s) => s.id === t.to);
+    if (!fromNode || !toNode) return { path: '', midX: 0, midY: 0 };
+
+    const fX = (fromNode.x || 0);
+    const fY = (fromNode.y || 0);
+    const tX = (toNode.x || 0);
+    const tY = (toNode.y || 0);
+
+    const isForward = tX > fX;
+    const isDirectNeighbor = Math.abs(tX - fX) < 400 && Math.abs(tY - fY) < 100;
+
+    let startX = 0;
+    let startY = 0;
+    let endX = 0;
+    let endY = 0;
+    let cp1X = 0;
+    let cp1Y = 0;
+    let cp2X = 0;
+    let cp2Y = 0;
+
+    if (isForward && isDirectNeighbor) {
+      // Horizontal straight-ish arrow from right of fromNode to left of toNode
+      startX = fX + NODE_WIDTH;
+      startY = fY + NODE_HEIGHT / 2;
+      endX = tX;
+      endY = tY + NODE_HEIGHT / 2;
+      const dx = (endX - startX) * 0.5;
+      cp1X = startX + dx;
+      cp1Y = startY;
+      cp2X = endX - dx;
+      cp2Y = endY;
+    } else if (isForward) {
+      // Forward long hop: curve above
+      startX = fX + NODE_WIDTH * 0.75;
+      startY = fY;
+      endX = tX + NODE_WIDTH * 0.25;
+      endY = tY;
+      const curveHeight = Math.min(120, Math.abs(tX - fX) * 0.25);
+      cp1X = startX + 50;
+      cp1Y = startY - curveHeight;
+      cp2X = endX - 50;
+      cp2Y = endY - curveHeight;
+    } else {
+      // Backward arrow: sweep below nodes cleanly
+      startX = fX + NODE_WIDTH * 0.25;
+      startY = fY + NODE_HEIGHT;
+      endX = tX + NODE_WIDTH * 0.75;
+      endY = tY + NODE_HEIGHT;
+      const curveDepth = Math.max(90, Math.min(160, Math.abs(fX - tX) * 0.22));
+      cp1X = startX - 40;
+      cp1Y = startY + curveDepth;
+      cp2X = endX + 40;
+      cp2Y = endY + curveDepth;
+    }
+
+    const path = `M ${startX} ${startY} C ${cp1X} ${cp1Y}, ${cp2X} ${cp2Y}, ${endX} ${endY}`;
+    // Approximate midpoint
+    const midX = 0.125 * startX + 0.375 * cp1X + 0.375 * cp2X + 0.125 * endX;
+    const midY = 0.125 * startY + 0.375 * cp1Y + 0.375 * cp2Y + 0.125 * endY;
+
+    return { path, midX, midY };
   };
 
   return (
-    <div class="space-y-6 pb-16 max-w-6xl mx-auto">
-      {/* Header */}
-      <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-4">
+    <div class="space-y-4 pb-16 max-w-full">
+      {/* Top Toolbar */}
+      <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-4">
         <div>
-          <div class="flex items-center gap-2 mb-1">
-            <GitFork class="w-5 h-5 text-blue-600" />
-            <h1 class="text-xl font-bold text-slate-900 tracking-tight">Workflow Editor</h1>
+          <div class="flex items-center gap-2">
+            <GitFork class="w-6 h-6 text-blue-600" />
+            <h1 class="text-xl font-bold text-slate-900 tracking-tight">Interactive Workflow Editor</h1>
+            <span class="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-blue-100 text-blue-700">
+              {params.projectKey}
+            </span>
           </div>
-          <p class="text-xs text-slate-500">
-            Customize the statuses and progression stages for project{' '}
-            <span class="font-semibold text-slate-700">{params.projectKey}</span>. Changes update Kanban columns automatically.
+          <p class="text-xs text-slate-500 mt-1">
+            Drag statuses anywhere on the canvas and connect pointer arrows between any states to enforce Kanban movement
           </p>
         </div>
 
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2.5 flex-wrap">
+          {/* Strict Toggle */}
+          <label class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 cursor-pointer hover:bg-slate-100 transition select-none">
+            <input
+              type="checkbox"
+              checked={strict()}
+              onChange={(e) => {
+                setStrict(e.currentTarget.checked);
+                handleSave({ strict: e.currentTarget.checked });
+              }}
+              class="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
+            />
+            <ShieldCheck class="w-4 h-4 text-emerald-600" />
+            <span>Strict Board Enforcement</span>
+          </label>
+
           <button
-            onClick={() => setAddModalOpen(true)}
-            class="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs shadow-xs transition"
+            type="button"
+            onClick={handleAutoLayout}
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 font-medium text-xs transition"
+          >
+            <Move class="w-3.5 h-3.5" />
+            <span>Auto Layout</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setTransitionFrom(statuses()[0]?.id || '');
+              setTransitionTo(statuses()[1]?.id || '');
+              setTransitionName('');
+              setAddTransitionOpen(true);
+            }}
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold text-xs transition"
+          >
+            <LinkIcon class="w-3.5 h-3.5" />
+            <span>+ Link Arrow</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setAddStatusOpen(true)}
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs shadow-xs transition"
           >
             <Plus class="w-4 h-4" />
-            <span>Add Status</span>
+            <span>+ Add Status</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleResetToDefault}
+            title="Reset to default template"
+            class="p-2 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-500 transition"
+          >
+            <RotateCcw class="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {/* Visual Workflow Pipeline Diagram */}
-      <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
-        <h2 class="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
-          <span>Kanban Lifecycle Pipeline</span>
-          <span class="text-xs font-normal text-slate-400">({statuses().length} stages)</span>
-        </h2>
+      {/* Visual Canvas Area */}
+      <div
+        class="relative w-full h-[620px] bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden shadow-inner select-none cursor-crosshair"
+        style={{
+          'background-image': 'radial-gradient(circle, #cbd5e1 1.2px, transparent 1.2px)',
+          'background-size': '24px 24px',
+        }}
+        onMouseMove={handleCanvasMouseMove}
+        onMouseUp={handleCanvasMouseUp}
+      >
+        {/* Helper Hint */}
+        <div class="absolute top-3 left-4 pointer-events-none z-10 flex items-center gap-2 text-[11px] font-medium text-slate-500 bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full border border-slate-200/80 shadow-xs">
+          <MousePointer class="w-3 h-3 text-blue-500" />
+          <span>Drag status cards anywhere &bull; Click "Link Arrow" on any card to connect pointers</span>
+        </div>
 
-        <div class="flex items-center gap-3 overflow-x-auto pb-6 pt-2">
-          <For each={statuses()}>
-            {(status, idx) => (
-              <>
-                {/* Status Card */}
-                <div class="w-60 shrink-0 bg-slate-50/80 hover:bg-slate-50 border border-slate-200 rounded-xl p-4 transition-all shadow-xs group">
-                  <div class="flex items-center justify-between mb-3">
-                    <span
-                      class="w-3.5 h-3.5 rounded-full ring-2 ring-white shadow-xs shrink-0"
-                      style={{ 'background-color': status.color }}
-                    />
-                    <div class="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition">
-                      <button
-                        disabled={idx() === 0}
-                        onClick={() => moveStatus(idx(), 'left')}
-                        class="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-200 disabled:opacity-20"
-                        title="Move left"
-                      >
-                        <MoveLeft class="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        disabled={idx() === statuses().length - 1}
-                        onClick={() => moveStatus(idx(), 'right')}
-                        class="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-200 disabled:opacity-20"
-                        title="Move right"
-                      >
-                        <MoveRight class="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => removeStatus(idx())}
-                        class="p-1 rounded text-slate-400 hover:text-red-600 hover:bg-red-50"
-                        title="Delete status"
-                      >
-                        <Trash2 class="w-3.5 h-3.5" />
-                      </button>
+        {/* SVG Pointer Arrows Overlay */}
+        <svg class="absolute inset-0 w-full h-full pointer-events-none z-0">
+          <defs>
+            <marker
+              id="workflow-arrow"
+              viewBox="0 0 10 10"
+              refX="8"
+              refY="5"
+              markerWidth="6"
+              markerHeight="6"
+              orient="auto-start-reverse"
+            >
+              <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#3b82f6" />
+            </marker>
+          </defs>
+
+          {/* Render All Transitions */}
+          <For each={transitions()}>
+            {(t) => {
+              const geom = () => getPathForTransition(t);
+              return (
+                <g class="transition-all duration-150">
+                  <path
+                    d={geom().path}
+                    fill="none"
+                    stroke="#3b82f6"
+                    stroke-width="2.5"
+                    stroke-dasharray="none"
+                    marker-end="url(#workflow-arrow)"
+                    class="drop-shadow-xs"
+                  />
+                </g>
+              );
+            }}
+          </For>
+        </svg>
+
+        {/* Transition Labels & Delete Buttons (Rendered above SVG) */}
+        <For each={transitions()}>
+          {(t) => {
+            const geom = () => getPathForTransition(t);
+            return (
+              <div
+                class="absolute z-10 -translate-x-1/2 -translate-y-1/2 flex items-center gap-1.5 px-2.5 py-1 bg-white border border-blue-200 shadow-sm rounded-full text-[10px] font-semibold text-slate-700 hover:border-red-300 hover:text-red-700 group transition-all"
+                style={{
+                  left: `${geom().midX}px`,
+                  top: `${geom().midY}px`,
+                }}
+              >
+                <span>{t.name || 'Transition'}</span>
+                <button
+                  type="button"
+                  title="Remove this transition arrow"
+                  onClick={() => handleDeleteTransition(t.id)}
+                  class="p-0.5 text-slate-400 hover:text-red-600 rounded-full hover:bg-red-50 transition"
+                >
+                  <X class="w-3 h-3" />
+                </button>
+              </div>
+            );
+          }}
+        </For>
+
+        {/* Draggable Status Nodes */}
+        <For each={statuses()}>
+          {(status) => {
+            const isDragging = () => draggingNodeId() === status.id;
+            return (
+              <div
+                class={`absolute z-20 w-[220px] bg-white rounded-2xl border-2 transition-shadow shadow-sm cursor-grab active:cursor-grabbing select-none ${
+                  isDragging()
+                    ? 'shadow-xl ring-2 ring-blue-500 border-blue-500 scale-102'
+                    : 'border-slate-200/90 hover:border-blue-400 hover:shadow-md'
+                }`}
+                style={{
+                  left: `${status.x || 60}px`,
+                  top: `${status.y || 160}px`,
+                }}
+                onMouseDown={(e) => handleNodeMouseDown(e, status.id)}
+              >
+                {/* Node Header & Color strip */}
+                <div class="p-3.5 space-y-2">
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <span
+                        class="w-3.5 h-3.5 rounded-full shadow-xs"
+                        style={{ 'background-color': status.color }}
+                      />
+                      <span class="font-bold text-slate-900 text-xs truncate max-w-[120px]">
+                        {status.title}
+                      </span>
                     </div>
+
+                    <button
+                      type="button"
+                      title="Delete status"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteStatus(status.id);
+                      }}
+                      class="text-slate-300 hover:text-red-500 p-1 rounded-lg hover:bg-red-50 transition"
+                    >
+                      <Trash2 class="w-3.5 h-3.5" />
+                    </button>
                   </div>
 
-                  <h3 class="font-bold text-slate-900 text-sm mb-1">{status.title}</h3>
-                  <p class="text-xs text-slate-500 line-clamp-2 min-h-[32px]">
-                    {status.description || `Category: ${status.category.replace('_', ' ')}`}
+                  <p class="text-[11px] text-slate-500 truncate">
+                    {status.description || `Category: ${status.category}`}
                   </p>
 
-                  <div class="mt-3 pt-3 border-t border-slate-200/60 flex items-center justify-between text-[11px]">
-                    <span class="font-mono text-slate-400">ID: {status.id}</span>
+                  <div class="pt-2 border-t border-slate-100 flex items-center justify-between">
                     <span
-                      class="px-2 py-0.5 rounded-full font-semibold uppercase text-[10px]"
+                      class="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider"
                       style={{
                         'background-color': `${status.color}15`,
                         color: status.color,
@@ -211,100 +580,182 @@ export function WorkflowPage() {
                     >
                       {status.category}
                     </span>
+
+                    {/* Quick Link Arrow Trigger */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openLinkFrom(status.id);
+                      }}
+                      class="flex items-center gap-1 text-[10px] font-semibold text-blue-600 hover:text-blue-800 hover:underline"
+                    >
+                      <LinkIcon class="w-3 h-3" />
+                      <span>Link Arrow</span>
+                    </button>
                   </div>
                 </div>
-
-                {/* Arrow Connector */}
-                <Show when={idx() < statuses().length - 1}>
-                  <div class="shrink-0 text-slate-300">
-                    <ArrowRight class="w-5 h-5" />
-                  </div>
-                </Show>
-              </>
-            )}
-          </For>
-        </div>
+              </div>
+            );
+          }}
+        </For>
       </div>
 
-      {/* Info Tip */}
-      <div class="flex items-start gap-3 p-4 rounded-xl bg-blue-50/60 border border-blue-200 text-xs text-blue-900">
-        <Info class="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
-        <div>
-          <span class="font-bold">Agile Board Synchronization:</span> The Kanban board columns reflect the statuses defined above in real time. Dragging issues on the Kanban board updates the issue status according to this workflow.
+      {/* Info Tip & Active Rules */}
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="p-4 rounded-xl bg-blue-50/70 border border-blue-200 text-xs text-blue-900 space-y-1">
+          <div class="font-bold flex items-center gap-1.5">
+            <Info class="w-4 h-4 text-blue-600" />
+            <span>Kanban Board Strict Rules</span>
+          </div>
+          <p class="text-slate-700">
+            {strict()
+              ? 'Strict enforcement is ACTIVE. Cards on the Kanban board and status selectors can ONLY be moved along the blue arrows configured above.'
+              : 'Strict enforcement is OFF. Issues can be moved freely between any columns.'}
+          </p>
+        </div>
+
+        <div class="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 space-y-1">
+          <div class="font-bold text-slate-900">Current Transition Rules ({transitions().length} pointers)</div>
+          <p class="text-slate-500 truncate">
+            {transitions()
+              .map((t) => `${t.from} ➔ ${t.to}`)
+              .join(', ')}
+          </p>
         </div>
       </div>
 
       {/* Add Status Modal */}
-      <Modal
-        open={addModalOpen()}
-        onClose={() => setAddModalOpen(false)}
-        title="Add Workflow Status"
-        size="md"
-      >
-        <div class="px-6 py-5 space-y-4">
-          <Input
-            label="Status Name *"
-            placeholder="e.g. QA Testing, Blocked, Ready to Deploy"
-            value={newTitle()}
-            onInput={(e) => setNewTitle(e.currentTarget.value)}
-            fullWidth
-          />
+      <Show when={addStatusOpen()}>
+        <Modal
+          open={addStatusOpen()}
+          onClose={() => setAddStatusOpen(false)}
+          title="Add New Workflow Status"
+          size="sm"
+        >
+          <div class="space-y-4 text-xs">
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">Status Name *</label>
+              <input
+                type="text"
+                placeholder="e.g. Blocked, In QA, Ready to Ship"
+                class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500"
+                value={newTitle()}
+                onInput={(e) => setNewTitle(e.currentTarget.value)}
+              />
+            </div>
 
-          <RichSelect
-            label="Category"
-            options={categoryOptions}
-            value={newCategory()}
-            onChange={(val) => setNewCategory(val as any)}
-            fullWidth
-          />
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">Category</label>
+              <RichSelect
+                options={categoryOptions}
+                value={newCategory()}
+                onChange={(val) => setNewCategory(val as any)}
+              />
+            </div>
 
-          <div>
-            <label class="text-xs font-semibold text-slate-600 uppercase tracking-wide block mb-2">
-              Color Accent
-            </label>
-            <div class="flex items-center gap-3">
-              <For each={colorPresets}>
-                {(color) => (
-                  <button
-                    type="button"
-                    onClick={() => setNewColor(color)}
-                    class="w-7 h-7 rounded-full flex items-center justify-center transition-transform hover:scale-110 relative"
-                    style={{ 'background-color': color }}
-                  >
-                    <Show when={newColor() === color}>
-                      <Check class="w-4 h-4 text-white stroke-[3]" />
-                    </Show>
-                  </button>
-                )}
-              </For>
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">Color</label>
+              <div class="flex items-center gap-2 flex-wrap">
+                <For each={colorPresets}>
+                  {(clr) => (
+                    <button
+                      type="button"
+                      onClick={() => setNewColor(clr)}
+                      class={`w-6 h-6 rounded-full border-2 transition-transform ${
+                        newColor() === clr ? 'scale-125 border-slate-900 ring-2 ring-blue-300' : 'border-white'
+                      }`}
+                      style={{ 'background-color': clr }}
+                    />
+                  )}
+                </For>
+              </div>
+            </div>
+
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">Description (Optional)</label>
+              <textarea
+                placeholder="When should an issue be in this status?"
+                class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500 resize-none h-16"
+                value={newDescription()}
+                onInput={(e) => setNewDescription(e.currentTarget.value)}
+              />
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
+              <Button variant="secondary" size="sm" onClick={() => setAddStatusOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="primary" size="sm" onClick={handleAddStatus}>
+                Create Status
+              </Button>
             </div>
           </div>
+        </Modal>
+      </Show>
 
-          <div>
-            <label class="text-xs font-semibold text-slate-600 uppercase tracking-wide block mb-1">
-              Description (optional)
-            </label>
-            <input
-              type="text"
-              placeholder="Brief explanation of this stage"
-              value={newDescription()}
-              onInput={(e) => setNewDescription(e.currentTarget.value)}
-              class="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-blue-500"
-            />
+      {/* Add Transition Arrow Modal */}
+      <Show when={addTransitionOpen()}>
+        <Modal
+          open={addTransitionOpen()}
+          onClose={() => setAddTransitionOpen(false)}
+          title="Connect Pointer / Transition Arrow"
+          size="sm"
+        >
+          <div class="space-y-4 text-xs">
+            <p class="text-slate-500 text-[11px]">
+              Define an allowable progression step. Tasks can be moved on the Kanban board from the source status to the target status.
+            </p>
+
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">From Status (Source) *</label>
+              <select
+                class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
+                value={transitionFrom()}
+                onChange={(e) => setTransitionFrom(e.currentTarget.value)}
+              >
+                <For each={statuses()}>
+                  {(s) => <option value={s.id}>{s.title}</option>}
+                </For>
+              </select>
+            </div>
+
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">To Status (Target) *</label>
+              <select
+                class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
+                value={transitionTo()}
+                onChange={(e) => setTransitionTo(e.currentTarget.value)}
+              >
+                <For each={statuses()}>
+                  {(s) => <option value={s.id}>{s.title}</option>}
+                </For>
+              </select>
+            </div>
+
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">Action Name (Optional)</label>
+              <input
+                type="text"
+                placeholder="e.g. Start Work, Submit Review, Fast Track"
+                class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs outline-none focus:border-blue-500"
+                value={transitionName()}
+                onInput={(e) => setTransitionName(e.currentTarget.value)}
+              />
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
+              <Button variant="secondary" size="sm" onClick={() => setAddTransitionOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="primary" size="sm" onClick={handleSaveTransition}>
+                Create Arrow
+              </Button>
+            </div>
           </div>
-        </div>
-
-        <div class="px-6 py-4 border-t border-slate-200 flex justify-end gap-3 bg-slate-50/50 rounded-b-xl">
-          <Button variant="secondary" onClick={() => setAddModalOpen(false)}>
-            Cancel
-          </Button>
-          <Button onClick={handleAddStatus} loading={saving()}>
-            Add Status
-          </Button>
-        </div>
-      </Modal>
+        </Modal>
+      </Show>
     </div>
   );
 }
 export default WorkflowPage;
-

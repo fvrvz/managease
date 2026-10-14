@@ -100,16 +100,22 @@ module Api
       # ── Workflow & GitHub integrations ─────────────────────────────────────────
       def workflow
         authorize @project, :show?
-        render json: { workflow_statuses: @project.configured_workflow }
+        render json: {
+          workflow_statuses: @project.configured_workflow,
+          workflow_data: @project.workflow_data
+        }
       end
 
       def update_workflow
         authorize @project, :update?
-        statuses = params[:workflow_statuses]
-        if @project.has_attribute?(:workflow_statuses)
-          @project.update!(workflow_statuses: statuses)
+        payload = params[:workflow_data] || params[:workflow] || params[:workflow_statuses]
+        if @project.has_attribute?(:workflow_statuses) && payload.present?
+          @project.update!(workflow_statuses: payload.as_json)
         end
-        render json: { workflow_statuses: @project.configured_workflow }
+        render json: {
+          workflow_statuses: @project.configured_workflow,
+          workflow_data: @project.workflow_data
+        }
       end
 
       def github_settings

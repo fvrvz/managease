@@ -52,18 +52,71 @@ class Project < ApplicationRecord
     sprints.find_by(status: :active)
   end
 
-  DEFAULT_WORKFLOW = [
-    { id: 'todo', title: 'To Do', category: 'todo', color: '#94a3b8' },
-    { id: 'in_progress', title: 'In Progress', category: 'in_progress', color: '#3b82f6' },
-    { id: 'in_review', title: 'In Review', category: 'in_progress', color: '#8b5cf6' },
-    { id: 'done', title: 'Done', category: 'done', color: '#22c55e' }
+  DEFAULT_WORKFLOW_STATUSES = [
+    { id: 'todo', title: 'To Do', category: 'todo', color: '#94a3b8', x: 80, y: 140 },
+    { id: 'in_progress', title: 'In Progress', category: 'in_progress', color: '#3b82f6', x: 380, y: 140 },
+    { id: 'in_review', title: 'In Review', category: 'in_progress', color: '#8b5cf6', x: 680, y: 140 },
+    { id: 'done', title: 'Done', category: 'done', color: '#22c55e', x: 980, y: 140 }
   ].freeze
 
-  def configured_workflow
-    if has_attribute?(:workflow_statuses) && workflow_statuses.present?
-      workflow_statuses.is_a?(String) ? JSON.parse(workflow_statuses) : workflow_statuses
+  DEFAULT_TRANSITIONS = [
+    { id: 't1', from: 'todo', to: 'in_progress', name: 'Start Work' },
+    { id: 't2', from: 'in_progress', to: 'in_review', name: 'Submit for Review' },
+    { id: 't3', from: 'in_review', to: 'done', name: 'Approve & Complete' },
+    { id: 't4', from: 'in_review', to: 'in_progress', name: 'Request Changes' },
+    { id: 't5', from: 'in_progress', to: 'todo', name: 'Stop Work' },
+    { id: 't6', from: 'done', to: 'todo', name: 'Reopen' }
+  ].freeze
+
+  DEFAULT_WORKFLOW = DEFAULT_WORKFLOW_STATUSES
+
+  def workflow_data
+    raw = has_attribute?(:workflow_statuses) && workflow_statuses.present? ? workflow_statuses : nil
+    raw = JSON.parse(raw) if raw.is_a?(String)
+
+    if raw.is_a?(Hash)
+      data = raw.with_indifferent_access
+      data[:statuses] ||= DEFAULT_WORKFLOW_STATUSES
+      data[:transitions] ||= DEFAULT_TRANSITIONS
+      data[:strict] = data[:strict] != false
+      data
+    elsif raw.is_a?(Array)
+      {
+        statuses: raw,
+        transitions: DEFAULT_TRANSITIONS,
+        strict: true
+      }.with_indifferent_access
     else
-      DEFAULT_WORKFLOW
+      {
+        statuses: DEFAULT_WORKFLOW_STATUSES,
+        transitions: DEFAULT_TRANSITIONS,
+        strict: true
+      }.with_indifferent_access
+    end
+  end
+
+  def configured_workflow
+    workflow_data[:statuses]
+  end
+
+  def workflow_transitions
+    workflow_data[:transitions] || []
+  end
+
+  def strict_workflow?
+    workflow_data[:strict] != false
+  end
+
+  def allowed_transition?(from_status, to_status)
+    return true if from_status.to_s == to_status.to_s
+    return true unless strict_workflow?
+
+    transitions = workflow_transitions
+    return true if transitions.blank?
+
+    transitions.any? do |t|
+      (t[:from].to_s == from_status.to_s || t['from'].to_s == from_status.to_s) &&
+        (t[:to].to_s == to_status.to_s || t['to'].to_s == to_status.to_s)
     end
   end
 
