@@ -1,0 +1,9 @@
+<%= @actor&.display_name || 'A team member' %> updated status on <%= @issue.issue_key %>:
+
+Status changed: <%= @old_status %> -> <%= @new_status %>
+
+<%= @issue.issue_key %>: <%= @issue.title %>
+Assignee: <%= @issue.assignee&.display_name || 'Unassigned' %>
+Reporter: <%= @issue.reporter&.display_name || 'None' %>
+
+View issue: <%= @issue_url %>

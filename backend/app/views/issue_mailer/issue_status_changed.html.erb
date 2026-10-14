@@ -1,0 +1,28 @@
+<div class="actor-info">
+  <strong class="actor-name"><%= @actor&.display_name || 'A team member' %></strong> updated the status on:
+</div>
+
+<div class="issue-box">
+  <div class="issue-key"><%= @issue.issue_key %></div>
+  <h2 class="issue-title"><%= @issue.title %></h2>
+
+  <div style="margin: 12px 0; padding: 10px; background-color: #ffffff; border-radius: 4px; border: 1px solid #dfe1e6;">
+    <span style="color: #6b778c; font-size: 13px;">Status changed:</span>
+    <span class="pill" style="margin-left: 6px;"><%= @old_status %></span>
+    <span style="color: #6b778c; margin: 0 6px;">&rarr;</span>
+    <span class="pill pill-primary"><%= @new_status %></span>
+  </div>
+
+  <div class="meta-grid">
+    <div class="meta-row">
+      <div class="meta-label">Assignee:</div>
+      <div class="meta-val"><%= @issue.assignee&.display_name || 'Unassigned' %></div>
+    </div>
+    <div class="meta-row">
+      <div class="meta-label">Reporter:</div>
+      <div class="meta-val"><%= @issue.reporter&.display_name || 'None' %></div>
+    </div>
+  </div>
+</div>
+
+<a href="<%= @issue_url %>" class="btn-primary" target="_blank">View Status Update</a>

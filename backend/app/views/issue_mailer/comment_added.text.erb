@@ -1,0 +1,8 @@
+<%= @actor&.display_name || 'A team member' %> added a comment to <%= @issue.issue_key %>:
+
+<%= @issue.issue_key %>: <%= @issue.title %>
+
+Comment:
+<%= @comment.body %>
+
+View and reply: <%= @issue_url %>

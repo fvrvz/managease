@@ -1,0 +1,15 @@
+<%= @actor&.display_name || 'A team member' %> created issue <%= @issue.issue_key %>:
+
+<%= @issue.issue_key %>: <%= @issue.title %>
+Type: <%= @issue.issue_type.to_s.titleize %>
+Status: <%= @issue.status.to_s.titleize %>
+Priority: <%= @issue.priority.to_s.titleize %>
+Assignee: <%= @issue.assignee&.display_name || 'Unassigned' %>
+Reporter: <%= @issue.reporter&.display_name || 'None' %>
+
+<% if @issue.description.present? %>
+Description:
+<%= @issue.description %>
+<% end %>
+
+View issue: <%= @issue_url %>

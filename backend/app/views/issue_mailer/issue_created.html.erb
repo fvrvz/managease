@@ -1,0 +1,40 @@
+<div class="actor-info">
+  <strong class="actor-name"><%= @actor&.display_name || 'A team member' %></strong> created this issue:
+</div>
+
+<div class="issue-box">
+  <div class="issue-key"><%= @issue.issue_key %></div>
+  <h2 class="issue-title"><%= @issue.title %></h2>
+
+  <div class="meta-grid">
+    <div class="meta-row">
+      <div class="meta-label">Type:</div>
+      <div class="meta-val"><span class="pill"><%= @issue.issue_type.to_s.titleize %></span></div>
+    </div>
+    <div class="meta-row">
+      <div class="meta-label">Status:</div>
+      <div class="meta-val"><span class="pill pill-primary"><%= @issue.status.to_s.titleize %></span></div>
+    </div>
+    <div class="meta-row">
+      <div class="meta-label">Priority:</div>
+      <div class="meta-val"><%= @issue.priority.to_s.titleize %></div>
+    </div>
+    <div class="meta-row">
+      <div class="meta-label">Assignee:</div>
+      <div class="meta-val"><%= @issue.assignee&.display_name || 'Unassigned' %></div>
+    </div>
+    <div class="meta-row">
+      <div class="meta-label">Reporter:</div>
+      <div class="meta-val"><%= @issue.reporter&.display_name || 'None' %></div>
+    </div>
+  </div>
+</div>
+
+<% if @issue.description.present? %>
+  <div style="font-size: 13px; font-weight: 600; color: #5e6c84; margin-top: 16px;">Description:</div>
+  <div class="content-box">
+    <%= simple_format(@issue.description) %>
+  </div>
+<% end %>
+
+<a href="<%= @issue_url %>" class="btn-primary" target="_blank">View Issue</a>

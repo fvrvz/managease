@@ -23,12 +23,14 @@ module Api
       end
 
       def create
-        attrs = issue_params.merge(reporter: current_user)
+        attrs = issue_params
+        attrs[:reporter_id] ||= current_user.id
         attrs[:status] ||= :todo if attrs[:sprint_id].present? || attrs[:status].blank?
         @issue = @project.issues.build(attrs)
         authorize @issue
 
         if @issue.save
+          NotificationService.notify_issue_created(@issue, current_user)
           render_created(IssueSerializer, @issue, include: ALLOWED_INCLUDES)
         else
           render json: { error: 'Issue creation failed', details: @issue.errors.full_messages },
@@ -38,6 +40,9 @@ module Api
 
       def update
         authorize @issue
+
+        old_status = @issue.status
+        old_assignee_id = @issue.assignee_id
 
         new_status = issue_params[:status].presence
         if new_status.present? && new_status.to_s != @issue.status.to_s
@@ -52,6 +57,12 @@ module Api
         end
 
         if @issue.update(issue_params)
+          if @issue.status.to_s != old_status.to_s
+            NotificationService.notify_status_changed(@issue, old_status, @issue.status, current_user)
+          end
+          if @issue.assignee_id.present? && @issue.assignee_id != old_assignee_id
+            NotificationService.notify_issue_assigned(@issue, current_user)
+          end
           render_serialized(IssueSerializer, @issue, include: ALLOWED_INCLUDES)
         else
           render json: { error: 'Update failed', details: @issue.errors.full_messages },
@@ -88,7 +99,11 @@ module Api
           end
         end
 
+        old_status = @issue.status
         @issue.move_to_sprint(target_sprint, status: status_val)
+        if status_val.present? && status_val.to_s != old_status.to_s
+          NotificationService.notify_status_changed(@issue, old_status, @issue.status, current_user)
+        end
         render_serialized(IssueSerializer, @issue, include: ALLOWED_INCLUDES)
       rescue ActiveRecord::RecordInvalid => e
         render json: { error: e.message }, status: :unprocessable_entity
@@ -112,8 +127,12 @@ module Api
       # PATCH /api/v1/issues/:id/assign
       def assign
         authorize @issue, :update?
+        old_assignee_id = @issue.assignee_id
         assignee = params[:assignee_id].present? ? User.find(params[:assignee_id]) : nil
         @issue.update!(assignee: assignee)
+        if assignee.present? && assignee.id != old_assignee_id
+          NotificationService.notify_issue_assigned(@issue, current_user)
+        end
         render_serialized(IssueSerializer, @issue, include: ALLOWED_INCLUDES)
       end
 
@@ -178,7 +197,7 @@ module Api
           :story_points, :storyPoints, :due_date, :dueDate, :start_date, :startDate,
           :estimated_hours, :estimatedHours,
           :sprint_id, :sprintId, :epic_id, :epicId,
-          :assignee_id, :assigneeId, :parent_id, :parentId,
+          :assignee_id, :assigneeId, :reporter_id, :reporterId, :parent_id, :parentId,
           label_ids: []
         ).to_h.with_indifferent_access
 
@@ -206,11 +225,14 @@ module Api
         assignee_val = p.delete(:assigneeId)
         p[:assignee_id] = assignee_val if p[:assignee_id].blank? && assignee_val.present?
 
+        reporter_val = p.delete(:reporterId)
+        p[:reporter_id] = reporter_val if p[:reporter_id].blank? && reporter_val.present?
+
         parent_val = p.delete(:parentId)
         p[:parent_id] = parent_val if p[:parent_id].blank? && parent_val.present?
 
         # Blank to nil conversion for optional fields
-        %i[sprint_id epic_id assignee_id parent_id start_date due_date estimated_hours story_points].each do |k|
+        %i[sprint_id epic_id assignee_id reporter_id parent_id start_date due_date estimated_hours story_points].each do |k|
           p[k] = nil if p.key?(k) && p[k].blank?
         end
 

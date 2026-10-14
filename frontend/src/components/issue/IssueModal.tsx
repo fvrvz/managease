@@ -20,6 +20,7 @@ import {
   Clock,
   User,
   Plus,
+  Pencil,
 } from 'lucide-solid';
 import { issuesApi, commentsApi } from '@/api/endpoints';
 import {
@@ -32,6 +33,7 @@ import {
 import { user } from '@/stores/auth.store';
 import { useToast } from '@/components/ui/Toast';
 import { RichSelect, RichSelectOption } from '@/components/ui/RichSelect';
+import { RichTextEditor, MarkdownViewer } from '@/components/ui/RichTextEditor';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Spinner } from '@/components/ui/Spinner';
@@ -97,6 +99,8 @@ export function IssueModal(props: IssueModalProps) {
   const [editingTitle, setEditingTitle] = createSignal(false);
   const [title, setTitle] = createSignal(props.issue.title);
   const [description, setDescription] = createSignal(props.issue.description ?? '');
+  const [editingDescription, setEditingDescription] = createSignal(false);
+  const [savingDescription, setSavingDescription] = createSignal(false);
   const [savingComment, setSavingComment] = createSignal(false);
   const [loadingComments, setLoadingComments] = createSignal(false);
   const [copiedBranch, setCopiedBranch] = createSignal(false);
@@ -147,7 +151,15 @@ export function IssueModal(props: IssueModalProps) {
     setLocalIssue({ ...prev, [field]: value } as Issue);
     try {
       const payloadKey =
-        field === 'startDate' ? 'start_date' : field === 'dueDate' ? 'due_date' : field;
+        field === 'startDate'
+          ? 'start_date'
+          : field === 'dueDate'
+          ? 'due_date'
+          : field === 'reporterId'
+          ? 'reporter_id'
+          : field === 'assigneeId'
+          ? 'assignee_id'
+          : field;
       await updateIssue(prev.projectId, prev.id, { [payloadKey]: value });
       props.onUpdated?.({ ...prev, [field]: value } as Issue);
     } catch (err: any) {
@@ -173,6 +185,22 @@ export function IssueModal(props: IssueModalProps) {
     }
   };
 
+  const handleReporterChange = async (userId: string) => {
+    try {
+      await updateIssue(localIssue().projectId, localIssue().id, { reporter_id: userId || undefined });
+      const member = projectMembers.find((u) => String(u.id) === String(userId));
+      setLocalIssue((prev) => ({
+        ...prev,
+        reporterId: userId || undefined,
+        reporter: member || undefined,
+      }));
+      props.onUpdated?.(localIssue());
+      toast.addToast(`Reporter set to ${member?.name || 'None'}`, 'success');
+    } catch {
+      toast.addToast('Failed to update reporter', 'error');
+    }
+  };
+
   const saveTitle = async () => {
     setEditingTitle(false);
     if (title().trim() && title() !== localIssue().title) {
@@ -181,8 +209,19 @@ export function IssueModal(props: IssueModalProps) {
   };
 
   const saveDescription = async () => {
-    if (description() !== localIssue().description) {
-      await handleFieldUpdate('description', description());
+    if (description() !== (localIssue().description ?? '')) {
+      setSavingDescription(true);
+      try {
+        await handleFieldUpdate('description', description());
+        toast.addToast('Description saved', 'success');
+        setEditingDescription(false);
+      } catch {
+        toast.addToast('Failed to save description', 'error');
+      } finally {
+        setSavingDescription(false);
+      }
+    } else {
+      setEditingDescription(false);
     }
   };
 
@@ -278,6 +317,20 @@ export function IssueModal(props: IssueModalProps) {
     })),
   ];
 
+  const reporterOptions = (): RichSelectOption[] => [
+    { value: '', label: 'None', icon: <User class="w-4 h-4 text-slate-400" /> },
+    ...projectMembers.map((u) => ({
+      value: u.id,
+      label: u.name || u.email,
+      icon: (
+        <div class="w-5 h-5 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center">
+          {(u.name || u.email).slice(0, 2).toUpperCase()}
+        </div>
+      ),
+      description: u.email,
+    })),
+  ];
+
   return (
     <Portal>
       <div
@@ -345,16 +398,51 @@ export function IssueModal(props: IssueModalProps) {
 
               {/* Description */}
               <div>
-                <label class="text-xs font-bold text-slate-600 uppercase tracking-wide block mb-2">
-                  Description
-                </label>
-                <textarea
-                  class="w-full text-sm border border-slate-200 rounded-xl p-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 resize-y min-h-[120px] transition-colors"
-                  placeholder="Add a description to give context..."
-                  value={description()}
-                  onInput={(e) => setDescription(e.currentTarget.value)}
-                  onBlur={saveDescription}
-                />
+                <div class="flex items-center justify-between mb-2">
+                  <label class="text-xs font-bold text-slate-600 uppercase tracking-wide">
+                    Description
+                  </label>
+                  <Show when={!editingDescription()}>
+                    <button
+                      type="button"
+                      onClick={() => setEditingDescription(true)}
+                      class="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-semibold transition"
+                    >
+                      <Pencil class="w-3.5 h-3.5" />
+                      <span>Edit</span>
+                    </button>
+                  </Show>
+                </div>
+
+                <Show
+                  when={editingDescription()}
+                  fallback={
+                    <div
+                      onClick={() => setEditingDescription(true)}
+                      class="p-3.5 min-h-[90px] border border-slate-200 hover:border-slate-300 rounded-xl bg-slate-50/50 hover:bg-slate-50 cursor-pointer transition"
+                      title="Click to edit description"
+                    >
+                      <MarkdownViewer
+                        content={description()}
+                        emptyPlaceholder="Click here to add a description... (Markdown supported)"
+                      />
+                    </div>
+                  }
+                >
+                  <RichTextEditor
+                    value={description()}
+                    onChange={setDescription}
+                    minHeight="140px"
+                    showSaveCancel
+                    onSave={saveDescription}
+                    onCancel={() => {
+                      setDescription(localIssue().description ?? '');
+                      setEditingDescription(false);
+                    }}
+                    saving={savingDescription()}
+                    autoFocus
+                  />
+                </Show>
               </div>
 
               {/* Development / GitHub Branch helper */}
@@ -453,23 +541,22 @@ export function IssueModal(props: IssueModalProps) {
                                   {new Date(comment.createdAt).toLocaleDateString()}
                                 </span>
                               </div>
-                              <div class="text-sm text-slate-700 whitespace-pre-wrap prose-sm">
-                                {comment.body}
-                              </div>
+                              <MarkdownViewer content={comment.body} class="mt-1" />
                             </div>
                           </div>
                         )}
                       </For>
                     </div>
 
-                    <div class="flex gap-3">
+                    <div class="flex gap-3 items-start">
                       <Avatar name={user()?.name} src={user()?.avatarUrl} size="sm" />
                       <div class="flex-1 space-y-2">
-                        <textarea
-                          class="w-full text-sm border border-slate-200 rounded-xl p-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 resize-none min-h-[80px]"
-                          placeholder="Add a comment... (Markdown supported)"
+                        <RichTextEditor
                           value={newComment()}
-                          onInput={(e) => setNewComment(e.currentTarget.value)}
+                          onChange={setNewComment}
+                          placeholder="Add a comment... (Markdown supported)"
+                          minHeight="90px"
+                          onSubmitShortcut={submitComment}
                         />
                         <div class="flex justify-end">
                           <button
@@ -560,19 +647,16 @@ export function IssueModal(props: IssueModalProps) {
                 />
               </div>
 
-              {/* Reporter */}
+              {/* Reporter RichSelect */}
               <div>
                 <p class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Reporter</p>
-                <div class="flex items-center gap-2.5 p-2 bg-white rounded-lg border border-slate-200">
-                  <Avatar
-                    name={localIssue().reporter?.name}
-                    src={localIssue().reporter?.avatarUrl}
-                    size="sm"
-                  />
-                  <span class="text-xs font-medium text-slate-700 truncate">
-                    {localIssue().reporter?.name ?? '—'}
-                  </span>
-                </div>
+                <RichSelect
+                  value={localIssue().reporterId || ''}
+                  options={reporterOptions()}
+                  onChange={handleReporterChange}
+                  fullWidth
+                  size="sm"
+                />
               </div>
 
               {/* Time Tracking Widget */}

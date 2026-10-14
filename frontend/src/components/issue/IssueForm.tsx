@@ -18,7 +18,9 @@ import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { RichSelect, RichSelectOption } from '@/components/ui/RichSelect';
+import { RichTextEditor } from '@/components/ui/RichTextEditor';
 import { useToast } from '@/components/ui/Toast';
+import { user } from '@/stores/auth.store';
 import {
   createIssue,
   updateIssue,
@@ -121,6 +123,7 @@ export function IssueForm(props: IssueFormProps) {
   const [status, setStatus] = createSignal<IssueStatus>('todo');
   const [priority, setPriority] = createSignal<IssuePriority>('medium');
   const [assigneeId, setAssigneeId] = createSignal('');
+  const [reporterId, setReporterId] = createSignal('');
   const [description, setDescription] = createSignal('');
   const [sprintId, setSprintId] = createSignal('');
   const [epicId, setEpicId] = createSignal('');
@@ -145,6 +148,7 @@ export function IssueForm(props: IssueFormProps) {
         setStatus(props.editIssue.status || 'todo');
         setPriority(props.editIssue.priority || 'medium');
         setAssigneeId(props.editIssue.assigneeId || '');
+        setReporterId(props.editIssue.reporterId || '');
         setDescription(props.editIssue.description || '');
         setSprintId(props.editIssue.sprintId || '');
         setEpicId(props.editIssue.epicId || '');
@@ -158,6 +162,7 @@ export function IssueForm(props: IssueFormProps) {
         setStatus(props.defaultStatus || 'todo');
         setPriority('medium');
         setAssigneeId('');
+        setReporterId(user()?.id || '');
         setDescription('');
         setSprintId(props.sprintId || '');
         setEpicId('');
@@ -189,6 +194,7 @@ export function IssueForm(props: IssueFormProps) {
         status: status() || 'todo',
         priority: priority(),
         assignee_id: assigneeId() || null,
+        reporter_id: reporterId() || null,
         description: description(),
         sprint_id: sprintId() || null,
         epic_id: epicId() || null,
@@ -226,6 +232,20 @@ export function IssueForm(props: IssueFormProps) {
       label: u.name || u.email,
       icon: (
         <div class="w-5 h-5 rounded-full bg-blue-600 text-white font-bold text-[10px] flex items-center justify-center">
+          {(u.name || u.email).slice(0, 2).toUpperCase()}
+        </div>
+      ),
+      description: u.email,
+    })),
+  ];
+
+  const reporterOptions = (): RichSelectOption[] => [
+    { value: '', label: 'None', icon: <User class="w-4 h-4 text-slate-400" /> },
+    ...projectMembers.map((u) => ({
+      value: u.id,
+      label: u.name || u.email,
+      icon: (
+        <div class="w-5 h-5 rounded-full bg-indigo-600 text-white font-bold text-[10px] flex items-center justify-center">
           {(u.name || u.email).slice(0, 2).toUpperCase()}
         </div>
       ),
@@ -292,8 +312,8 @@ export function IssueForm(props: IssueFormProps) {
           />
         </div>
 
-        {/* Status & Assignee */}
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* Status, Assignee & Reporter */}
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <RichSelect
             label="Status"
             options={statusOptions}
@@ -306,6 +326,13 @@ export function IssueForm(props: IssueFormProps) {
             options={assigneeOptions()}
             value={assigneeId()}
             onChange={setAssigneeId}
+            fullWidth
+          />
+          <RichSelect
+            label="Reporter"
+            options={reporterOptions()}
+            value={reporterId()}
+            onChange={setReporterId}
             fullWidth
           />
         </div>
@@ -382,11 +409,11 @@ export function IssueForm(props: IssueFormProps) {
           <label class="text-xs font-semibold text-slate-600 uppercase tracking-wide block mb-1">
             Description
           </label>
-          <textarea
-            class="w-full text-sm border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 resize-y min-h-[90px] transition-colors"
-            placeholder="Add a detailed description..."
+          <RichTextEditor
             value={description()}
-            onInput={(e) => setDescription(e.currentTarget.value)}
+            onChange={setDescription}
+            placeholder="Add a detailed description (Markdown supported)..."
+            minHeight="120px"
           />
         </div>
       </div>

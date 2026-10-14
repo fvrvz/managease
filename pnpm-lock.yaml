@@ -28,6 +28,9 @@ importers:
       lucide-solid:
         specifier: ^0.475.0
         version: 0.475.0(solid-js@1.9.17)
+      marked:
+        specifier: ^18.1.1
+        version: 18.1.1
       solid-js:
         specifier: ^1.9.0
         version: 1.9.17
@@ -803,6 +806,11 @@ packages:
     resolution: {integrity: sha512-iAelwwRgMJie0sj+qWWQzYOixbk6FUcxflF3od+ZMpQokmeCD+yywyNMMsqfCcsCD50PBKKhqBeFsdjUzlhfxw==}
     peerDependencies:
       solid-js: ^1.4.7
+
+  marked@18.1.1:
+    resolution: {integrity: sha512-zEGgrtUG8crk+TrMacJSVABU4DYDDkS8uqgU3ohrn/2fW9C2AEfUrO3m6IhpIpQpl7YcVpiXXC9cSMWDANT3dg==}
+    engines: {node: '>= 20'}
+    hasBin: true
 
   math-intrinsics@1.1.0:
     resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
@@ -1732,6 +1740,8 @@ snapshots:
   lucide-solid@0.475.0(solid-js@1.9.17):
     dependencies:
       solid-js: 1.9.17
+
+  marked@18.1.1: {}
 
   math-intrinsics@1.1.0: {}
 

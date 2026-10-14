@@ -20,6 +20,7 @@ module Api
         authorize @comment
 
         if @comment.save
+          NotificationService.notify_comment_added(@issue, @comment, current_user)
           render_created(CommentSerializer, @comment)
         else
           render json: { error: 'Comment creation failed', details: @comment.errors.full_messages },

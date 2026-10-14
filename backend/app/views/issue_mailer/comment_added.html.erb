@@ -1,0 +1,15 @@
+<div class="actor-info">
+  <strong class="actor-name"><%= @actor&.display_name || 'A team member' %></strong> commented on:
+</div>
+
+<div class="issue-box">
+  <div class="issue-key"><%= @issue.issue_key %></div>
+  <h2 class="issue-title"><%= @issue.title %></h2>
+</div>
+
+<div style="font-size: 13px; font-weight: 600; color: #5e6c84; margin-top: 16px;">Comment:</div>
+<div class="content-box">
+  <%= simple_format(@comment.body) %>
+</div>
+
+<a href="<%= @issue_url %>" class="btn-primary" target="_blank">Reply to Comment</a>

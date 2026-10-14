@@ -1,0 +1,14 @@
+<%= @actor&.display_name || 'A team member' %> assigned you to <%= @issue.issue_key %>:
+
+<%= @issue.issue_key %>: <%= @issue.title %>
+Type: <%= @issue.issue_type.to_s.titleize %>
+Status: <%= @issue.status.to_s.titleize %>
+Priority: <%= @issue.priority.to_s.titleize %>
+Reporter: <%= @issue.reporter&.display_name || 'None' %>
+
+<% if @issue.description.present? %>
+Description:
+<%= @issue.description %>
+<% end %>
+
+Open issue: <%= @issue_url %>

@@ -130,8 +130,10 @@ export interface Issue {
   priority: IssuePriority;
   storyPoints?: number;
   assigneeId?: string;
+  assignee_id?: string;
   assignee?: User;
   reporterId?: string;
+  reporter_id?: string;
   reporter?: User;
   labels?: Label[];
   subtasks?: Issue[];
