@@ -47,7 +47,8 @@ apiClient.interceptors.response.use(
       setToken(bodyToken);
     }
     // 2. Devise-jwt returns Authorization header on login/register
-    const authHeader = response.headers?.['authorization'] || response.headers?.get?.('authorization');
+    const headers = response.headers as any;
+    const authHeader = headers?.['authorization'] || (typeof headers?.get === 'function' ? headers.get('authorization') : null);
     if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
       const token = authHeader.substring(7);
       setToken(token);

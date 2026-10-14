@@ -10,6 +10,8 @@ import { SprintsPage } from '@/pages/sprints/SprintsPage';
 import { RoadmapPage } from '@/pages/roadmap/RoadmapPage';
 import { ReportsPage } from '@/pages/reports/ReportsPage';
 import { ImportPage } from '@/pages/settings/ImportPage';
+import { WorkflowPage } from '@/pages/workflow/WorkflowPage';
+import { SettingsPage } from '@/pages/settings/SettingsPage';
 
 export function App() {
   return (
@@ -28,8 +30,10 @@ export function App() {
         <Route path="projects/:projectKey/backlog" component={BacklogPage} />
         <Route path="projects/:projectKey/sprints" component={SprintsPage} />
         <Route path="projects/:projectKey/roadmap" component={RoadmapPage} />
+        <Route path="projects/:projectKey/workflow" component={WorkflowPage} />
         <Route path="projects/:projectKey/reports" component={ReportsPage} />
         <Route path="projects/:projectKey/import" component={ImportPage} />
+        <Route path="projects/:projectKey/settings" component={SettingsPage} />
       </Route>
 
       {/* Fallback */}

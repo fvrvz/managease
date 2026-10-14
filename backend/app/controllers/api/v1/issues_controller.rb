@@ -23,7 +23,9 @@ module Api
       end
 
       def create
-        @issue = @project.issues.build(issue_params.merge(reporter: current_user))
+        attrs = issue_params.merge(reporter: current_user)
+        attrs[:status] ||= :todo if attrs[:sprint_id].present? || attrs[:status].blank?
+        @issue = @project.issues.build(attrs)
         authorize @issue
 
         if @issue.save
@@ -56,10 +58,14 @@ module Api
       def move
         authorize @issue, :update?
 
-        @issue.move_to_sprint(
-          params[:sprint_id] ? Sprint.find(params[:sprint_id]) : @issue.sprint,
-          status: params[:status]
-        )
+        target_sprint = if params.key?(:sprint_id)
+                          params[:sprint_id].present? && params[:sprint_id] != 'null' ? Sprint.find(params[:sprint_id]) : nil
+                        else
+                          @issue.sprint
+                        end
+
+        status_val = params[:status].presence
+        @issue.move_to_sprint(target_sprint, status: status_val)
         render_serialized(IssueSerializer, @issue, include: ALLOWED_INCLUDES)
       rescue ActiveRecord::RecordInvalid => e
         render json: { error: e.message }, status: :unprocessable_entity

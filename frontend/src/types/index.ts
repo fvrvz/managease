@@ -21,6 +21,15 @@ export interface AuthTokens {
 
 // ── Project ───────────────────────────────────
 
+export interface WorkflowStatus {
+  id: string;
+  title: string;
+  category: 'todo' | 'in_progress' | 'done';
+  color: string;
+  position?: number;
+  description?: string;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -32,6 +41,9 @@ export interface Project {
   lead?: User;
   members?: ProjectMember[];
   issueCount?: number;
+  workflowStatuses?: WorkflowStatus[];
+  githubRepo?: string;
+  githubWebhookSecret?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -94,6 +106,7 @@ export interface Issue {
   epicId?: string;
   parentId?: string;      // for subtasks
   key: string;            // e.g. "ME-42"
+  number?: number;
   title: string;
   description?: string;
   type: IssueType;

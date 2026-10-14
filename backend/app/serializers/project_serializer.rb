@@ -27,4 +27,16 @@ class ProjectSerializer
 
     SprintSerializer.new(sprint).serializable_hash[:data]
   end
+
+  attribute :workflow_statuses do |project|
+    project.configured_workflow
+  end
+
+  attribute :github_repo do |project|
+    project.try(:github_repo)
+  end
+
+  attribute :github_webhook_secret do |project|
+    project.try(:github_webhook_secret)
+  end
 end

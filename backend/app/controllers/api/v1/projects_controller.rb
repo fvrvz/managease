@@ -4,7 +4,8 @@ module Api
   module V1
     class ProjectsController < BaseController
       before_action :set_project, only: [:show, :update, :destroy, :members,
-                                         :add_member, :update_member, :remove_member]
+                                         :add_member, :update_member, :remove_member,
+                                         :workflow, :update_workflow, :github_settings]
 
       def index
         projects = policy_scope(Project).includes(:owner, :project_members).order(created_at: :desc)
@@ -96,6 +97,31 @@ module Api
         end
       end
 
+      # ── Workflow & GitHub integrations ─────────────────────────────────────────
+      def workflow
+        authorize @project, :show?
+        render json: { workflow_statuses: @project.configured_workflow }
+      end
+
+      def update_workflow
+        authorize @project, :update?
+        statuses = params[:workflow_statuses]
+        if @project.has_attribute?(:workflow_statuses)
+          @project.update!(workflow_statuses: statuses)
+        end
+        render json: { workflow_statuses: @project.configured_workflow }
+      end
+
+      def github_settings
+        authorize @project, :update?
+        updates = {}
+        updates[:github_repo] = params[:github_repo] if @project.has_attribute?(:github_repo) && params.key?(:github_repo)
+        updates[:github_webhook_secret] = params[:github_webhook_secret] if @project.has_attribute?(:github_webhook_secret) && params.key?(:github_webhook_secret)
+        updates[:github_token] = params[:github_token] if @project.has_attribute?(:github_token) && params.key?(:github_token)
+        @project.update!(updates) if updates.any?
+        render_serialized(ProjectSerializer, @project)
+      end
+
       private
 
       def set_project
@@ -104,7 +130,7 @@ module Api
 
       def project_params
         source = params[:project].present? ? params.require(:project) : params
-        source.permit(:name, :key, :description, :status)
+        source.permit(:name, :key, :description, :status, :github_repo, :github_webhook_secret, workflow_statuses: [])
       end
     end
   end

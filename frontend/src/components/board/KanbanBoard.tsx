@@ -1,41 +1,69 @@
 import { createSignal, createMemo, For, Show, onMount } from 'solid-js';
+import { Search, Plus, Calendar, Filter, ChevronsUp, ChevronUp, Minus, ChevronDown, ChevronsDown } from 'lucide-solid';
 import { KanbanColumn } from './KanbanColumn';
 import { IssueForm } from '@/components/issue/IssueForm';
-import { Avatar } from '@/components/ui/Avatar';
-import { Spinner } from '@/components/ui/Spinner';
+import { RichSelect, RichSelectOption } from '@/components/ui/RichSelect';
 import { ColumnSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import {
   issues,
   sprints,
-  epics,
   fetchIssues,
   moveIssueOptimistic,
-  projectLoading,
+  globalSearchQuery,
+  setGlobalSearchQuery,
+  currentProject,
 } from '@/stores/project.store';
-import type { Issue, IssueStatus, Sprint } from '@/types';
+import type { Issue, IssueStatus, Sprint, WorkflowStatus } from '@/types';
 
 interface KanbanBoardProps {
   projectId: string;
   projectKey: string;
 }
 
-const COLUMNS: { id: IssueStatus; title: string; color: string }[] = [
+const DEFAULT_COLUMNS: { id: IssueStatus; title: string; color: string }[] = [
   { id: 'todo', title: 'To Do', color: '#94a3b8' },
   { id: 'in_progress', title: 'In Progress', color: '#3b82f6' },
   { id: 'in_review', title: 'In Review', color: '#8b5cf6' },
   { id: 'done', title: 'Done', color: '#22c55e' },
 ];
 
+const priorityFilterOptions: RichSelectOption[] = [
+  { value: '', label: 'All Priorities' },
+  {
+    value: 'highest',
+    label: 'Highest',
+    icon: <ChevronsUp class="w-3.5 h-3.5 text-red-600 stroke-[2.5]" />,
+  },
+  {
+    value: 'high',
+    label: 'High',
+    icon: <ChevronUp class="w-3.5 h-3.5 text-orange-500 stroke-[2.5]" />,
+  },
+  {
+    value: 'medium',
+    label: 'Medium',
+    icon: <Minus class="w-3.5 h-3.5 text-yellow-500 stroke-[2.5]" />,
+  },
+  {
+    value: 'low',
+    label: 'Low',
+    icon: <ChevronDown class="w-3.5 h-3.5 text-blue-500 stroke-[2.5]" />,
+  },
+  {
+    value: 'lowest',
+    label: 'Lowest',
+    icon: <ChevronsDown class="w-3.5 h-3.5 text-slate-400 stroke-[2.5]" />,
+  },
+];
+
 export function KanbanBoard(props: KanbanBoardProps) {
   const toast = useToast();
   const [activeSprint, setActiveSprint] = createSignal<Sprint | null>(null);
-  const [draggingIssue, setDraggingIssue] = createSignal<Issue | null>(null);
   const [showForm, setShowForm] = createSignal(false);
   const [defaultStatus, setDefaultStatus] = createSignal<IssueStatus>('todo');
-  const [searchQuery, setSearchQuery] = createSignal('');
   const [filterAssignee, setFilterAssignee] = createSignal<string | null>(null);
-  const [filterPriority, setFilterPriority] = createSignal<string | null>(null);
+  const [filterPriority, setFilterPriority] = createSignal<string>('');
   const [loading, setLoading] = createSignal(true);
 
   onMount(async () => {
@@ -49,10 +77,29 @@ export function KanbanBoard(props: KanbanBoardProps) {
     setLoading(false);
   });
 
+  const columns = createMemo(() => {
+    const custom = currentProject()?.workflowStatuses;
+    if (custom && custom.length > 0) {
+      return custom.map((c) => ({
+        id: c.id as IssueStatus,
+        title: c.title,
+        color: c.color,
+      }));
+    }
+    return DEFAULT_COLUMNS;
+  });
+
   const filteredIssues = createMemo(() => {
     let list = [...issues];
-    const q = searchQuery().toLowerCase();
-    if (q) list = list.filter((i) => i.title.toLowerCase().includes(q) || i.key.toLowerCase().includes(q));
+    const q = (globalSearchQuery() || '').toLowerCase().trim();
+    if (q) {
+      list = list.filter(
+        (i) =>
+          (i.title && i.title.toLowerCase().includes(q)) ||
+          (i.key && i.key.toLowerCase().includes(q)) ||
+          (i.description && i.description.toLowerCase().includes(q)),
+      );
+    }
     if (filterAssignee()) list = list.filter((i) => i.assigneeId === filterAssignee());
     if (filterPriority()) list = list.filter((i) => i.priority === filterPriority());
     return list;
@@ -61,102 +108,97 @@ export function KanbanBoard(props: KanbanBoardProps) {
   const issuesForColumn = (status: IssueStatus) =>
     filteredIssues()
       .filter((i) => i.status === status)
-      .sort((a, b) => a.position - b.position);
-
-  const handleDragStart = (_: DragEvent, issue: Issue) => {
-    setDraggingIssue(issue);
-  };
+      .sort((a, b) => (a.position || 0) - (b.position || 0));
 
   const handleDrop = async (issueId: string, newStatus: IssueStatus) => {
-    const issue = issues.find((i) => i.id === issueId);
+    const issue = issues.find((i) => String(i.id) === String(issueId));
     if (!issue || issue.status === newStatus) return;
     try {
-      await moveIssueOptimistic(props.projectId, issueId, newStatus);
+      await moveIssueOptimistic(props.projectId, issueId, newStatus, activeSprint()?.id);
     } catch {
       toast.addToast('Failed to move issue', 'error');
     }
-    setDraggingIssue(null);
   };
 
   const handleAddIssue = (status: IssueStatus) => {
-    setDefaultStatus(status);
+    setDefaultStatus(status || 'todo');
     setShowForm(true);
   };
 
   const activeSprints = () => sprints.filter((s) => s.status === 'active' || s.status === 'planning');
 
+  const sprintSelectOptions = (): RichSelectOption[] => [
+    { value: '', label: 'All Issues' },
+    ...activeSprints().map((s) => ({
+      value: s.id,
+      label: s.name,
+      badge: s.status.toUpperCase(),
+      icon: <Calendar class="w-3.5 h-3.5 text-blue-500" />,
+    })),
+  ];
+
   return (
     <div class="flex flex-col h-full">
       {/* Toolbar */}
       <div class="flex items-center gap-3 mb-4 flex-wrap">
-        {/* Sprint selector */}
+        {/* Sprint selector with RichSelect */}
         <Show when={activeSprints().length > 0}>
-          <select
-            class="text-sm border border-slate-300 rounded-md px-3 py-1.5 outline-none bg-white focus:border-indigo-400"
-            value={activeSprint()?.id ?? ''}
-            onChange={(e) => {
-              const s = sprints.find((sp) => sp.id === e.currentTarget.value);
-              setActiveSprint(s ?? null);
-              fetchIssues(props.projectId, e.currentTarget.value || undefined);
-            }}
-          >
-            <option value="">All Issues</option>
-            <For each={activeSprints()}>
-              {(s) => <option value={s.id}>{s.name}</option>}
-            </For>
-          </select>
+          <div class="w-52">
+            <RichSelect
+              size="sm"
+              options={sprintSelectOptions()}
+              value={activeSprint()?.id ?? ''}
+              onChange={(val) => {
+                const s = sprints.find((sp) => sp.id === val);
+                setActiveSprint(s ?? null);
+                fetchIssues(props.projectId, val || undefined);
+              }}
+            />
+          </div>
         </Show>
 
         {/* Search */}
-        <div class="relative">
-          <svg class="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" stroke-linecap="round" />
-          </svg>
+        <div class="relative w-56">
+          <Search class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
-            class="pl-8 pr-3 py-1.5 text-sm border border-slate-300 rounded-md outline-none focus:border-indigo-400 bg-white w-48"
-            placeholder="Search issues…"
-            value={searchQuery()}
-            onInput={(e) => setSearchQuery(e.currentTarget.value)}
+            class="w-full pl-9 pr-3 py-1.5 text-xs border border-slate-300 rounded-lg outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 bg-white placeholder-slate-400 transition"
+            placeholder="Search issues, keys…"
+            value={globalSearchQuery()}
+            onInput={(e) => setGlobalSearchQuery(e.currentTarget.value)}
           />
         </div>
 
-        {/* Priority filter */}
-        <select
-          class="text-sm border border-slate-300 rounded-md px-2 py-1.5 outline-none bg-white focus:border-indigo-400"
-          value={filterPriority() ?? ''}
-          onChange={(e) => setFilterPriority(e.currentTarget.value || null)}
-        >
-          <option value="">All Priorities</option>
-          <option value="highest">Highest</option>
-          <option value="high">High</option>
-          <option value="medium">Medium</option>
-          <option value="low">Low</option>
-          <option value="lowest">Lowest</option>
-        </select>
+        {/* Priority filter with RichSelect */}
+        <div class="w-44">
+          <RichSelect
+            size="sm"
+            options={priorityFilterOptions}
+            value={filterPriority()}
+            onChange={setFilterPriority}
+          />
+        </div>
 
         {/* Create button */}
         <button
-          onClick={() => { setDefaultStatus('todo'); setShowForm(true); }}
-          class="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-indigo-700 text-white text-sm font-semibold rounded-md hover:bg-indigo-800 transition-colors"
+          onClick={() => handleAddIssue('todo')}
+          class="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
         >
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <path d="M12 5v14M5 12h14" stroke-linecap="round" />
-          </svg>
-          Create
+          <Plus class="w-4 h-4" />
+          <span>Add issue</span>
         </button>
       </div>
 
-      {/* Board columns */}
-      <div class="flex gap-4 flex-1 overflow-x-auto pb-4">
+      {/* Columns Container */}
+      <div class="flex gap-4 flex-1 overflow-x-auto pb-4 items-start">
         <Show
           when={!loading()}
           fallback={
-            <For each={COLUMNS}>
+            <For each={columns()}>
               {() => <ColumnSkeleton />}
             </For>
           }
         >
-          <For each={COLUMNS}>
+          <For each={columns()}>
             {(col) => (
               <KanbanColumn
                 id={col.id}
@@ -166,7 +208,7 @@ export function KanbanBoard(props: KanbanBoardProps) {
                 projectKey={props.projectKey}
                 onDrop={handleDrop}
                 onAddIssue={handleAddIssue}
-                onDragStart={handleDragStart}
+                onDragStart={() => {}}
               />
             )}
           </For>

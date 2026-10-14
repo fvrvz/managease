@@ -11,7 +11,8 @@ import {
   ChevronLeft,
   ChevronRight,
   FolderKanban,
-  Plus
+  Plus,
+  GitFork,
 } from 'lucide-solid';
 import { currentProject, projects } from '@/stores/project.store';
 
@@ -54,9 +55,19 @@ export const Sidebar = (props: SidebarProps) => {
       href: `/projects/${projectKey()}/reports`,
     },
     {
+      label: 'Workflow Editor',
+      icon: GitFork,
+      href: `/projects/${projectKey()}/workflow`,
+    },
+    {
       label: 'Excel Plan Import',
       icon: FileSpreadsheet,
       href: `/projects/${projectKey()}/import`,
+    },
+    {
+      label: 'GitHub & Settings',
+      icon: Settings,
+      href: `/projects/${projectKey()}/settings`,
     },
   ];
 

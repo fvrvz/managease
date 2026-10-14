@@ -52,6 +52,21 @@ class Project < ApplicationRecord
     sprints.find_by(status: :active)
   end
 
+  DEFAULT_WORKFLOW = [
+    { id: 'todo', title: 'To Do', category: 'todo', color: '#94a3b8' },
+    { id: 'in_progress', title: 'In Progress', category: 'in_progress', color: '#3b82f6' },
+    { id: 'in_review', title: 'In Review', category: 'in_progress', color: '#8b5cf6' },
+    { id: 'done', title: 'Done', category: 'done', color: '#22c55e' }
+  ].freeze
+
+  def configured_workflow
+    if has_attribute?(:workflow_statuses) && workflow_statuses.present?
+      workflow_statuses.is_a?(String) ? JSON.parse(workflow_statuses) : workflow_statuses
+    else
+      DEFAULT_WORKFLOW
+    end
+  end
+
   private
 
   def upcase_key

@@ -32,6 +32,9 @@ Rails.application.routes.draw do
       get '/me', to: 'users#me'
       put '/me', to: 'users#update_me'
 
+      # GitHub Webhook (called by GitHub servers or UI test)
+      post '/github/webhook', to: 'github_webhooks#receive'
+
       # Projects
       resources :projects do
         member do
@@ -39,6 +42,9 @@ Rails.application.routes.draw do
           post :add_member
           put 'members/:user_id', to: 'projects#update_member', as: :update_member
           delete 'members/:user_id', to: 'projects#remove_member', as: :remove_member
+          get :workflow
+          put :workflow, to: 'projects#update_workflow'
+          put :github_settings
         end
 
         resources :sprints do

@@ -7,6 +7,8 @@ import type { Project, Sprint, Epic, Issue, Label, IssueStatus } from '@/types';
 const normalizeItem = (item: any) => {
   if (!item) return item;
   const obj = item.attributes ? { id: item.id, ...item.attributes } : { ...item };
+  if (obj.issue_key !== undefined && obj.key === undefined) obj.key = obj.issue_key;
+  if (obj.issueKey !== undefined && obj.key === undefined) obj.key = obj.issueKey;
   if (obj.member_count !== undefined && obj.memberCount === undefined) obj.memberCount = obj.member_count;
   if (obj.issues_count !== undefined && obj.issueCount === undefined) obj.issueCount = obj.issues_count;
   if (obj.open_issues_count !== undefined && obj.openIssueCount === undefined) obj.openIssueCount = obj.open_issues_count;
@@ -16,6 +18,8 @@ const normalizeItem = (item: any) => {
   if (obj.assignee_id !== undefined && obj.assigneeId === undefined) obj.assigneeId = obj.assignee_id;
   if (obj.story_points !== undefined && obj.storyPoints === undefined) obj.storyPoints = obj.story_points;
   if (obj.issue_type !== undefined && obj.type === undefined) obj.type = obj.issue_type;
+  if (obj.workflow_statuses !== undefined && obj.workflowStatuses === undefined) obj.workflowStatuses = obj.workflow_statuses;
+  if (obj.github_repo !== undefined && obj.githubRepo === undefined) obj.githubRepo = obj.github_repo;
   return obj;
 };
 
@@ -41,6 +45,9 @@ const [issues, setIssues] = createStore<Issue[]>([]);
 const [labels, setLabels] = createStore<Label[]>([]);
 const [loading, setLoading] = createSignal(false);
 const [projectError, setProjectError] = createSignal<string | null>(null);
+
+// Global shared search state
+export const [globalSearchQuery, setGlobalSearchQuery] = createSignal('');
 
 export {
   projects,
@@ -98,6 +105,7 @@ export const updateProject = async (id: string, data: Partial<Project>): Promise
 export const deleteProject = async (id: string): Promise<void> => {
   await projectsApi.delete(id);
   setProjects((ps) => ps.filter((p) => p.id !== id));
+  if (currentProject()?.id === id) setCurrentProject(null);
 };
 
 // ── Sprints ───────────────────────────────────
@@ -131,13 +139,19 @@ export const deleteSprint = async (projectId: string, sprintId: string): Promise
 export const startSprint = async (projectId: string, sprintId: string): Promise<void> => {
   const res = await sprintsApi.start(projectId, sprintId);
   const updated = extractSingle<Sprint>(res.data);
-  setSprints((s) => s.id === sprintId, produce((s) => Object.assign(s, updated)));
+  setSprints(
+    (s) => s.id === sprintId,
+    produce((s) => Object.assign(s, updated, { status: 'active' })),
+  );
 };
 
 export const completeSprint = async (projectId: string, sprintId: string): Promise<void> => {
   const res = await sprintsApi.complete(projectId, sprintId);
   const updated = extractSingle<Sprint>(res.data);
-  setSprints((s) => s.id === sprintId, produce((s) => Object.assign(s, updated)));
+  setSprints(
+    (s) => s.id === sprintId,
+    produce((s) => Object.assign(s, updated, { status: 'completed' })),
+  );
 };
 
 // ── Epics ─────────────────────────────────────
@@ -188,28 +202,46 @@ export const createIssue = async (projectId: string, data: Partial<Issue>): Prom
 export const updateIssue = async (projectId: string, issueId: string, data: Partial<Issue>): Promise<void> => {
   const res = await issuesApi.update(projectId, issueId, data);
   const updated = extractSingle<Issue>(res.data);
-  setIssues((i) => i.id === issueId, produce((i) => Object.assign(i, updated)));
+  setIssues((i) => String(i.id) === String(issueId), produce((i) => Object.assign(i, updated)));
 };
 
 export const deleteIssue = async (projectId: string, issueId: string): Promise<void> => {
   await issuesApi.delete(projectId, issueId);
-  setIssues((is) => is.filter((i) => i.id !== issueId));
+  setIssues((is) => is.filter((i) => String(i.id) !== String(issueId)));
 };
 
-// Optimistic drag-drop: move issue to new status column
+// Optimistic drag-drop: move issue to new status column and/or sprint
 export const moveIssueOptimistic = async (
   projectId: string,
   issueId: string,
-  newStatus: IssueStatus,
-  sprintId?: string,
+  newStatus?: IssueStatus,
+  sprintId?: string | null,
 ): Promise<void> => {
-  const prevStatus = issues.find((i) => i.id === issueId)?.status;
-  setIssues((i) => i.id === issueId, 'status', newStatus);
+  const current = issues.find((i) => String(i.id) === String(issueId));
+  const prevStatus = current?.status;
+  const prevSprintId = current?.sprintId;
+
+  // Optimistic update
+  setIssues(
+    (i) => String(i.id) === String(issueId),
+    produce((issue) => {
+      if (newStatus) issue.status = newStatus;
+      if (sprintId !== undefined) issue.sprintId = sprintId ? sprintId : undefined;
+    }),
+  );
+
   try {
     await issuesApi.move(projectId, issueId, newStatus, sprintId);
   } catch (e) {
     // Rollback on error
-    if (prevStatus) setIssues((i) => i.id === issueId, 'status', prevStatus);
+    setIssues(
+      (i) => String(i.id) === String(issueId),
+      produce((issue) => {
+        if (prevStatus) issue.status = prevStatus;
+        if (prevSprintId !== undefined) issue.sprintId = prevSprintId;
+      }),
+    );
+    throw e;
   }
 };
 

@@ -58,6 +58,15 @@ export const projectsApi = {
 
   removeMember: (projectId: string, userId: string) =>
     apiClient.delete(`/api/v1/projects/${projectId}/members/${userId}`),
+
+  getWorkflow: (projectId: string) =>
+    apiClient.get(`/api/v1/projects/${projectId}/workflow`),
+
+  updateWorkflow: (projectId: string, statuses: any[]) =>
+    apiClient.put(`/api/v1/projects/${projectId}/workflow`, { workflow_statuses: statuses }),
+
+  updateGitHubSettings: (projectId: string, data: { github_repo?: string; github_webhook_secret?: string; github_token?: string }) =>
+    apiClient.put(`/api/v1/projects/${projectId}/github_settings`, data),
 };
 
 // ── Sprints ───────────────────────────────────
@@ -112,8 +121,12 @@ export const issuesApi = {
   delete: (projectId: string, issueId: string) =>
     apiClient.delete(`/api/v1/issues/${issueId}`),
 
-  move: (projectId: string, issueId: string, status: string, sprintId?: string) =>
-    apiClient.patch(`/api/v1/issues/${issueId}/move`, { status, sprint_id: sprintId }),
+  move: (projectId: string, issueId: string, status?: string, sprintId?: string | null) => {
+    const payload: Record<string, any> = {};
+    if (status !== undefined) payload.status = status;
+    if (sprintId !== undefined) payload.sprint_id = sprintId;
+    return apiClient.patch(`/api/v1/issues/${issueId}/move`, payload);
+  },
 
   reorder: (projectId: string, issueId: string, position: number) =>
     apiClient.patch(`/api/v1/issues/${issueId}/reorder`, { position }),

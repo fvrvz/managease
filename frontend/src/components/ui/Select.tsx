@@ -1,4 +1,5 @@
 import { splitProps, For, type JSX } from 'solid-js';
+import { ChevronDown } from 'lucide-solid';
 import { clsx } from 'clsx';
 
 interface SelectOption {
@@ -33,29 +34,31 @@ export function Select(props: SelectProps) {
           {local.label}
         </label>
       )}
-      <select
-        id={id}
-        {...rest}
-        class={clsx(
-          'block px-3 py-2 text-sm bg-white border rounded-md outline-none appearance-none bg-no-repeat cursor-pointer transition-colors',
-          'bg-[url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Cpath fill=%27none%27 stroke=%27%23475569%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27 stroke-width=%272%27 d=%27m2 5 6 6 6-6%27/%3E%3C/svg%3E")]',
-          'bg-[length:16px] bg-[right_10px_center] pr-9',
-          local.error
-            ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-200'
-            : 'border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100',
-          local.fullWidth && 'w-full',
-          local.class,
-        )}
-      >
-        {local.placeholder && (
-          <option value="" disabled>
-            {local.placeholder}
-          </option>
-        )}
-        <For each={local.options}>
-          {(opt) => <option value={opt.value}>{opt.label}</option>}
-        </For>
-      </select>
+      <div class="relative w-full">
+        <select
+          id={id}
+          {...rest}
+          class={clsx(
+            'block w-full px-3 py-2 text-sm bg-white border rounded-lg outline-none appearance-none cursor-pointer pr-9 transition-colors',
+            local.error
+              ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-200'
+              : 'border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 hover:border-slate-400',
+            local.class,
+          )}
+        >
+          {local.placeholder && (
+            <option value="" disabled>
+              {local.placeholder}
+            </option>
+          )}
+          <For each={local.options}>
+            {(opt) => <option value={opt.value}>{opt.label}</option>}
+          </For>
+        </select>
+        <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2.5 text-slate-400">
+          <ChevronDown class="w-4 h-4" />
+        </div>
+      </div>
       {local.error && <p class="text-xs text-red-500">{local.error}</p>}
     </div>
   );
