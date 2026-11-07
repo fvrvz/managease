@@ -1,5 +1,6 @@
 packages:
   - "frontend"
+  - "showcase"
 
 allowBuilds:
   esbuild: set this to true or false

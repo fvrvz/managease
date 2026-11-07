@@ -131,8 +131,9 @@ export function KanbanBoard(props: KanbanBoardProps) {
 
     try {
       await moveIssueOptimistic(props.projectId, issueId, newStatus, activeSprint()?.id);
-    } catch (err: any) {
-      const msg = err?.response?.data?.error || 'Failed to move issue';
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      const msg = axiosErr?.response?.data?.error || 'Failed to move issue';
       toast.addToast(msg, 'error');
     }
   };

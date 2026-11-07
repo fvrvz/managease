@@ -650,7 +650,7 @@ export function WorkflowPage() {
               <RichSelect
                 options={categoryOptions}
                 value={newCategory()}
-                onChange={(val) => setNewCategory(val as any)}
+                onChange={(val) => setNewCategory(val as WorkflowStatus['category'])}
               />
             </div>
 

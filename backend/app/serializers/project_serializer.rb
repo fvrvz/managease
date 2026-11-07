@@ -43,4 +43,8 @@ class ProjectSerializer
   attribute :github_webhook_secret do |project|
     project.try(:github_webhook_secret)
   end
+
+  attribute :ai_import_enabled do |project|
+    project.try(:ai_import_enabled?) || false
+  end
 end

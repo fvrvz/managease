@@ -22,6 +22,7 @@ class ProjectPolicy < ApplicationPolicy
   end
 
   def manage?
+    return true if user.respond_to?(:admin?) && user.admin?
     return true if record.owner_id == user.id
 
     role = record.role_for(user)

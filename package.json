@@ -7,6 +7,9 @@
     "dev": "pnpm --filter frontend dev",
     "build": "pnpm --filter frontend build",
     "preview": "pnpm --filter frontend preview",
+    "dev:showcase": "pnpm --filter managease-showcase dev",
+    "build:showcase": "pnpm --filter managease-showcase build",
+    "preview:showcase": "pnpm --filter managease-showcase preview",
     "prepare": "husky"
   },
   "engines": {

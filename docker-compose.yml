@@ -21,6 +21,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      target: dev
     container_name: managease_backend
     restart: unless-stopped
     depends_on:
@@ -44,6 +45,12 @@ services:
       - backend_storage:/app/storage
     ports:
       - "3000:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
     command: >
       bash -c "
         rm -f tmp/pids/server.pid &&
@@ -60,16 +67,40 @@ services:
     container_name: managease_frontend
     restart: unless-stopped
     environment:
+      CI: "true"
       VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:3000}
     volumes:
       - ./frontend:/app
-      - /app/node_modules
+      - frontend_node_modules:/app/node_modules
     ports:
       - "5173:5173"
-    command: sh -c "pnpm install && pnpm dev --host"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:5173/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    command: sh -c "pnpm install --force && pnpm dev --host"
+
+  showcase:
+    build:
+      context: ./showcase
+      dockerfile: Dockerfile
+      target: production
+    container_name: managease_showcase
+    restart: unless-stopped
+    ports:
+      - "5174:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:80/ || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 3s
 
 volumes:
   postgres_data:
   backend_bundle:
   backend_storage:
+  frontend_node_modules:
 

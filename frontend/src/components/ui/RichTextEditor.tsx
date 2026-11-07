@@ -157,6 +157,7 @@ export function parseMarkdown(md: string): string {
     .map((block) => {
       const trimmed = block.trim();
       if (!trimmed) return '';
+      // eslint-disable-next-line no-control-regex
       if (/^<(h[1-6]|ul|ol|table|blockquote|\x00CODE|hr)/i.test(trimmed)) {
         return trimmed;
       }

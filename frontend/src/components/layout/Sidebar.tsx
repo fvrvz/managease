@@ -71,7 +71,7 @@ export const Sidebar = (props: SidebarProps) => {
       href: `/projects/${projectKey()}/import`,
     },
     {
-      label: 'GitHub & Settings',
+      label: 'Settings',
       icon: Settings,
       href: `/projects/${projectKey()}/settings`,
     },

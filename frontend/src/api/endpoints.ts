@@ -13,6 +13,8 @@ import type {
   VelocityPoint,
   IssueBreakdown,
   PaginatedResponse,
+  WorkflowData,
+  WorkflowStatus,
 } from '@/types';
 
 // ── Auth ──────────────────────────────────────
@@ -66,10 +68,10 @@ export const projectsApi = {
   getWorkflow: (projectId: string) =>
     apiClient.get(`/api/v1/projects/${projectId}/workflow`),
 
-  updateWorkflow: (projectId: string, data: any) =>
+  updateWorkflow: (projectId: string, data: WorkflowData | WorkflowStatus[]) =>
     apiClient.put(`/api/v1/projects/${projectId}/workflow`, {
       workflow_data: data,
-      workflow_statuses: Array.isArray(data) ? data : data?.statuses,
+      workflow_statuses: Array.isArray(data) ? data : (data as WorkflowData)?.statuses,
     }),
 
   updateGitHubSettings: (projectId: string, data: { github_repo?: string; github_webhook_secret?: string; github_token?: string }) =>
@@ -132,7 +134,7 @@ export const issuesApi = {
     apiClient.delete(`/api/v1/issues/${issueId}`),
 
   move: (projectId: string, issueId: string, status?: string, sprintId?: string | null) => {
-    const payload: Record<string, any> = {};
+    const payload: Record<string, string | null> = {};
     if (status !== undefined) payload.status = status;
     if (sprintId !== undefined) payload.sprint_id = sprintId;
     return apiClient.patch(`/api/v1/issues/${issueId}/move`, payload);
@@ -201,7 +203,7 @@ export const commentsApi = {
 
 export const reportsApi = {
   burndown: (projectId: string, sprintId: string) =>
-    apiClient.get<{ data: any; sprint: any }>(`/api/v1/projects/${projectId}/reports/burndown`, {
+    apiClient.get<{ data: Record<string, unknown>[]; sprint: Sprint }>(`/api/v1/projects/${projectId}/reports/burndown`, {
       params: { sprint_id: sprintId },
     }),
 
@@ -209,10 +211,10 @@ export const reportsApi = {
     apiClient.get<{ data: VelocityPoint[] }>(`/api/v1/projects/${projectId}/reports/velocity`),
 
   issueSummary: (projectId: string) =>
-    apiClient.get<{ data: any }>(`/api/v1/projects/${projectId}/reports/issue_summary`),
+    apiClient.get<{ data: Record<string, number> }>(`/api/v1/projects/${projectId}/reports/issue_summary`),
 
   timeTracking: (projectId: string, sprintId?: string) =>
-    apiClient.get<{ data: any }>(`/api/v1/projects/${projectId}/reports/time_tracking`, {
+    apiClient.get<{ data: Record<string, unknown>[] }>(`/api/v1/projects/${projectId}/reports/time_tracking`, {
       params: { sprint_id: sprintId },
     }),
 };
@@ -228,6 +230,73 @@ export const usersApi = {
 
 // ── Imports ───────────────────────────────────
 
+export interface AiImportSettings {
+  provider?: 'openai' | 'gemini' | 'ollama';
+  model?: string;
+  base_url?: string;
+  enabled: boolean;
+  hint?: string;
+  has_key?: boolean;
+  api_key?: string;
+}
+
+export interface AiImportPreviewIssue {
+  title: string;
+  description?: string;
+  issue_type?: string;
+  priority?: string;
+  status?: string;
+  story_points?: number | null;
+  epic?: string | null;
+  sprint?: string | null;
+  assignee?: string | null;
+  due_date?: string | null;
+  labels?: string[];
+}
+
+export interface AiImportPreviewEpic {
+  name: string;
+  description?: string;
+  color?: string;
+}
+
+export interface AiImportPreviewSprint {
+  name: string;
+  goal?: string;
+  start_date?: string | null;
+  end_date?: string | null;
+}
+
+export interface AiModelInfo {
+  id: string;
+  name: string;
+  description?: string;
+  input_token_limit?: number;
+  output_token_limit?: number;
+}
+
+export interface AiUsageInfo {
+  provider: string;
+  model: string;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  estimated_cost_usd: number;
+}
+
+export interface AiImportPreview {
+  summary: {
+    epics_count: number;
+    sprints_count: number;
+    issues_count: number;
+    sheets_analysed: string[];
+    notes: string;
+  };
+  epics: AiImportPreviewEpic[];
+  sprints: AiImportPreviewSprint[];
+  issues: AiImportPreviewIssue[];
+}
+
 export const importsApi = {
   uploadExcel: (projectId: string, file: File) => {
     const form = new FormData();
@@ -236,4 +305,31 @@ export const importsApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
+
+  // Phase 1 — LLM analysis: returns structured preview and token/cost usage
+  aiAnalyze: (projectId: string, file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return apiClient.post<{ success: boolean; preview: AiImportPreview; usage?: AiUsageInfo }>(
+      `/api/v1/projects/${projectId}/imports/ai_analyze`,
+      form,
+      { headers: { 'Content-Type': 'multipart/form-data' } }
+    );
+  },
+
+  // Phase 2 — commit confirmed preview to database
+  aiCommit: (projectId: string, preview: AiImportPreview) =>
+    apiClient.post<{ imported: { epics: number; sprints: number; issues: number }; errors: string[] }>(
+      `/api/v1/projects/${projectId}/imports/ai_commit`,
+      { preview }
+    ),
+
+  getAiSettings: (projectId: string) =>
+    apiClient.get<AiImportSettings>(`/api/v1/projects/${projectId}/imports/ai_settings`),
+
+  updateAiSettings: (projectId: string, settings: Partial<AiImportSettings> & { api_key?: string; keep_existing_key?: boolean }) =>
+    apiClient.put(`/api/v1/projects/${projectId}/imports/ai_settings`, settings),
+
+  getAiModels: (projectId: string, params?: { provider?: string; api_key?: string; base_url?: string }) =>
+    apiClient.post<{ models: AiModelInfo[] }>(`/api/v1/projects/${projectId}/imports/ai_models`, params || {}),
 };

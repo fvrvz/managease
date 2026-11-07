@@ -48,15 +48,17 @@ export function BurndownChart(props: BurndownChartProps) {
         const raw = res.data;
         if (Array.isArray(raw?.data)) {
           // Format from backend BurndownCalculator: [{ date, day, ideal, actual, total_points }]
-          const dataPoints = raw.data.map((d: any) => ({
-            date: d.date,
-            ideal: d.ideal,
-            actual: d.actual !== null ? d.actual : d.ideal,
+          const rawList = raw.data as unknown as Record<string, unknown>[];
+          const dataPoints = rawList.map((d) => ({
+            date: String(d.date || ''),
+            ideal: Number(d.ideal || 0),
+            actual: d.actual !== null && d.actual !== undefined ? Number(d.actual) : Number(d.ideal || 0),
           }));
+          const sprintObj = raw.sprint as unknown as { attributes?: { name?: string }; name?: string };
           setChartData({
             sprintId: props.sprintId,
-            sprintName: raw.sprint?.attributes?.name || 'Sprint',
-            totalPoints: raw.data[0]?.total_points || 0,
+            sprintName: sprintObj?.attributes?.name || sprintObj?.name || 'Sprint',
+            totalPoints: Number(rawList[0]?.total_points) || 0,
             dataPoints,
           });
         }

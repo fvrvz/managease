@@ -74,8 +74,9 @@ export function ProjectsPage() {
       setKey('');
       setDescription('');
       navigate(`/projects/${newProj.key}/board`);
-    } catch (err: any) {
-      const msg = err?.response?.data?.details?.join(', ') || err?.response?.data?.error || 'Failed to create project';
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { details?: string[]; error?: string } } };
+      const msg = axiosErr?.response?.data?.details?.join(', ') || axiosErr?.response?.data?.error || 'Failed to create project';
       toast.addToast(msg, 'error');
     } finally {
       setSaving(false);

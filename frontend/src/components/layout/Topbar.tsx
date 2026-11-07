@@ -182,7 +182,7 @@ export const Topbar = (props: TopbarProps) => {
                   class="flex items-center gap-2 px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition"
                 >
                   <Settings class="w-3.5 h-3.5 text-slate-400" />
-                  <span>Settings & GitHub</span>
+                  <span>Settings</span>
                 </A>
               </div>
 

@@ -162,9 +162,10 @@ export function IssueModal(props: IssueModalProps) {
           : field;
       await updateIssue(prev.projectId, prev.id, { [payloadKey]: value });
       props.onUpdated?.({ ...prev, [field]: value } as Issue);
-    } catch (err: any) {
+    } catch (err: unknown) {
       setLocalIssue(prev);
-      const msg = err?.response?.data?.error || 'Failed to update issue';
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      const msg = axiosErr?.response?.data?.error || 'Failed to update issue';
       toast.addToast(msg, 'error');
     }
   };
