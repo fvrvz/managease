@@ -1,0 +1,11 @@
+{
+  "apiBaseUrl": "http://localhost:3000",
+  "oidc": {
+    "enabled": false,
+    "authority": "https://accounts.google.com",
+    "clientId": "",
+    "redirectUri": "http://localhost:5173/auth/callback",
+    "postLogoutRedirectUri": "http://localhost:5173/login",
+    "scope": "openid profile email"
+  }
+}
