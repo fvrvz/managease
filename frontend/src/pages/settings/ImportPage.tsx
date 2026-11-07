@@ -191,6 +191,31 @@ export function ImportPage() {
     XLSX.writeFile(wb, 'managease-import-template.xlsx');
   };
 
+  const downloadAiSamplePlan = () => {
+    const rows = [
+      ['PROJECT ROADMAP & WORK BREAKDOWN STRUCTURE', '', '', '', '', '', '', ''],
+      ['Project:', 'NextGen E-Commerce Migration', 'Lead:', 'Sarah Chen', 'Target Date:', 'Q3 2026', 'Status:', 'Draft'],
+      ['Note:', 'This sheet uses custom business column headers and milestone releases.', '', '', '', '', '', ''],
+      [],
+      ['WBS', 'Deliverable / Feature', 'Work Stream', 'Target Release', 'Estimate (Pts)', 'Health / Status', 'Urgency', 'Implementation Details'],
+      ['1.0', 'Customer Identity & Access', 'Authentication & Security', 'Milestone 1 - Alpha', '', 'In Progress', 'Critical', 'Epic container for user authentication & IAM overhaul'],
+      ['1.1', 'Integrate Auth0 Single Sign-On', 'Authentication & Security', 'Milestone 1 - Alpha', 5, 'Completed', 'High', 'Support enterprise SAML and Google Workspace SSO authentication'],
+      ['1.2', 'Two-Factor Authentication (TOTP)', 'Authentication & Security', 'Milestone 1 - Alpha', 3, 'In Progress', 'High', 'Add QR code scanning and authenticator app backup codes'],
+      ['1.3', 'Fix session token expiry bug on mobile', 'Authentication & Security', 'Milestone 1 - Alpha', 2, 'Under Review', 'Urgent', 'JWT refresh token fails to rotate properly on iOS Safari'],
+      ['2.0', 'Product Catalog & Search Engine', 'Core Catalog', 'Milestone 1 - Alpha', '', 'Planned', 'High', 'Overhaul search infrastructure with vector search & elastic filters'],
+      ['2.1', 'Migrate product catalog to Elasticsearch 8', 'Core Catalog', 'Milestone 1 - Alpha', 8, 'Planned', 'High', 'Full-text indexing with fuzzy match and instant auto-complete suggestions'],
+      ['2.2', 'Category facet filtering UI', 'Core Catalog', 'Milestone 2 - Beta', 5, 'Planned', 'Medium', 'Multi-select facet filters for price range, brands, and availability tags'],
+      ['3.0', 'Checkout & Payment Processing', 'Payments & Billing', 'Milestone 2 - Beta', '', 'Planned', 'Critical', 'PCI-compliant checkout pipeline supporting multi-currency'],
+      ['3.1', 'Stripe Elements Payment Gateway', 'Payments & Billing', 'Milestone 2 - Beta', 8, 'Planned', 'Critical', 'Support credit cards, Apple Pay, and Google Pay with 3D Secure 2'],
+      ['3.2', 'Automated PDF Invoice Generation', 'Payments & Billing', 'Milestone 2 - Beta', 3, 'Planned', 'Low', 'Generate downloadable PDF receipt and trigger transactional email via SendGrid'],
+      ['3.3', 'Shopping cart currency conversion rounding error', 'Payments & Billing', 'Milestone 2 - Beta', 1, 'In Progress', 'High', 'Fix half-cent rounding discrepancy when converting EUR to USD'],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Roadmap & Tasks');
+    XLSX.writeFile(wb, 'sample_ai_plan.xlsx');
+  };
+
   // ── Render helpers ────────────────────────────────────────────────────────
   const fileDropZone = () => (
     <div
@@ -358,6 +383,18 @@ export function ImportPage() {
                   AI Smart Import analyses your spreadsheet with an LLM and extracts tasks regardless of its format or column names.
                   You will review the results before anything is saved.
                 </span>
+              </div>
+
+              <div class="flex items-center justify-between">
+                <div class="text-sm font-semibold text-slate-700">Upload your spreadsheet</div>
+                <button
+                  type="button"
+                  onClick={downloadAiSamplePlan}
+                  class="flex items-center gap-1.5 text-xs text-purple-600 hover:text-purple-700 font-medium cursor-pointer"
+                >
+                  <Download class="w-3.5 h-3.5" />
+                  Download sample AI plan (.xlsx)
+                </button>
               </div>
 
               {fileDropZone()}
