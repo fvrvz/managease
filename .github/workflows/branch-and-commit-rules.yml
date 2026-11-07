@@ -15,8 +15,15 @@ jobs:
           BASE="${{ github.base_ref }}"
           HEAD="${{ github.head_ref }}"
           REF="${{ github.ref_name }}"
+          REF_TYPE="${{ github.ref_type }}"
 
-          echo "Event: $EVENT, Base: $BASE, Head: $HEAD, Ref: $REF"
+          echo "Event: $EVENT, Base: $BASE, Head: $HEAD, Ref: $REF, RefType: $REF_TYPE"
+
+          # Skip branch validation for release tags (e.g. v1.0.0)
+          if [ "$REF_TYPE" = "tag" ] || [[ "$REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            echo "✅ Push is a release tag '$REF', skipping branch naming validation."
+            exit 0
+          fi
 
           NAMING_PATTERN="^(feature|bugfix|hotfix|docs|refactor)\/([A-Za-z0-9]+-[0-9]+|[0-9]+)-[a-z0-9-]+$"
 
@@ -75,7 +82,7 @@ jobs:
           pnpm commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
 
       - name: Validate Push Commit
-        if: github.event_name == 'push' && github.ref != 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref_type == 'branch' && github.ref != 'refs/heads/main'
         run: |
           pnpm commitlint --last --verbose
 
