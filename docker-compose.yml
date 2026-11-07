@@ -68,6 +68,20 @@ services:
       - "5173:5173"
     command: sh -c "pnpm install && pnpm dev --host"
 
+  showcase:
+    build:
+      context: ./showcase
+      dockerfile: Dockerfile
+      target: dev
+    container_name: managease_showcase
+    restart: unless-stopped
+    volumes:
+      - ./showcase:/app
+      - /app/node_modules
+    ports:
+      - "5174:5174"
+    command: sh -c "pnpm install && pnpm dev --host --port 5174"
+
 volumes:
   postgres_data:
   backend_bundle:
