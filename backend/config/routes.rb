@@ -75,6 +75,7 @@ Rails.application.routes.draw do
             post  :ai_commit
             get   :ai_settings
             put   :ai_settings, to: 'imports#update_ai_settings'
+            patch :ai_settings, to: 'imports#update_ai_settings'
           end
         end
       end

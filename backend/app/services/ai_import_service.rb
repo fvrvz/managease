@@ -113,12 +113,13 @@ class AiImportService
         name = ep[:name].to_s.strip
         next if name.blank?
 
-        epic = project.epics.find_or_create_by!(name: name) do |e|
-          e.color  = ep[:color].presence || '#6366F1'
-          e.status = :todo
-          e.description = ep[:description].to_s
-        end
-        epic_map[name] = epic
+        epic = project.epics.find_by('LOWER(name) = ?', name.downcase) ||
+               project.epics.create!(name: name) do |e|
+                 e.color  = ep[:color].presence || '#6366F1'
+                 e.status = :todo
+                 e.description = ep[:description].to_s
+               end
+        epic_map[name.downcase] = epic
         imported[:epics] += 1
       rescue StandardError => e
         errors << "Epic '#{name}': #{e.message}"
@@ -130,13 +131,14 @@ class AiImportService
         name = sp[:name].to_s.strip
         next if name.blank?
 
-        sprint = project.sprints.find_or_create_by!(name: name) do |s|
-          s.status     = :planning
-          s.goal       = sp[:goal].to_s
-          s.start_date = parse_date(sp[:start_date])
-          s.end_date   = parse_date(sp[:end_date])
-        end
-        sprint_map[name] = sprint
+        sprint = project.sprints.find_by('LOWER(name) = ?', name.downcase) ||
+                 project.sprints.create!(name: name) do |s|
+                   s.status     = :planning
+                   s.goal       = sp[:goal].to_s
+                   s.start_date = parse_date(sp[:start_date])
+                   s.end_date   = parse_date(sp[:end_date])
+                 end
+        sprint_map[name.downcase] = sprint
         imported[:sprints] += 1
       rescue StandardError => e
         errors << "Sprint '#{name}': #{e.message}"
@@ -147,16 +149,24 @@ class AiImportService
         title = iss[:title].to_s.strip
         next if title.blank?
 
+        sprint_name = iss[:sprint].to_s.strip
+        epic_name   = iss[:epic].to_s.strip
+
+        assigned_sprint = sprint_name.present? ? (sprint_map[sprint_name.downcase] || project.sprints.find_by('LOWER(name) = ?', sprint_name.downcase)) : nil
+        assigned_epic   = epic_name.present? ? (epic_map[epic_name.downcase] || project.epics.find_by('LOWER(name) = ?', epic_name.downcase)) : nil
+
+        default_status = assigned_sprint ? 'todo' : 'backlog'
+
         issue = project.issues.build(
           title:        title,
           description:  iss[:description].to_s,
           issue_type:   safe_enum(iss[:issue_type], %w[task story bug subtask], 'task'),
           priority:     safe_enum(iss[:priority],   %w[lowest low medium high highest], 'medium'),
-          status:       safe_enum(iss[:status],      %w[todo in_progress in_review done], 'todo'),
+          status:       safe_enum(iss[:status],     %w[todo in_progress in_review done backlog], default_status),
           story_points: iss[:story_points].presence&.to_i,
           due_date:     parse_date(iss[:due_date]),
-          sprint:       sprint_map[iss[:sprint].to_s],
-          epic:         epic_map[iss[:epic].to_s],
+          sprint:       assigned_sprint,
+          epic:         assigned_epic,
           assignee:     find_user(iss[:assignee]),
           reporter:     current_user
         )

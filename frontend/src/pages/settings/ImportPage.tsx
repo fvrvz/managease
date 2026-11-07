@@ -1,4 +1,4 @@
-import { createSignal, Show, For, createEffect } from 'solid-js';
+import { createSignal, Show, For, createEffect, onMount } from 'solid-js';
 import { useParams, useNavigate } from '@solidjs/router';
 import * as XLSX from 'xlsx';
 import {
@@ -48,19 +48,28 @@ export function ImportPage() {
     epics: true, sprints: true, issues: false,
   });
 
+  onMount(async () => {
+    if (params.projectKey && (!currentProject() || currentProject()?.key !== params.projectKey)) {
+      await fetchProject(params.projectKey);
+    }
+  });
+
   // Check if AI is enabled for this project
   createEffect(async () => {
-    const proj = currentProject();
+    let proj = currentProject();
     if (!proj?.id) {
-      if (params.projectKey) await fetchProject(params.projectKey);
-      return;
+      if (params.projectKey) {
+        await fetchProject(params.projectKey);
+        proj = currentProject();
+      }
+      if (!proj?.id) return;
     }
     try {
       const res = await importsApi.getAiSettings(proj.id);
       const data = res.data as { enabled?: boolean };
-      setAiEnabled(data?.enabled === true);
+      setAiEnabled(data?.enabled === true || (proj as unknown as Record<string, unknown>).ai_import_enabled === true);
     } catch {
-      setAiEnabled(false);
+      setAiEnabled((proj as unknown as Record<string, unknown>).ai_import_enabled === true);
     }
   });
 

@@ -19,6 +19,7 @@ import {
 } from 'lucide-solid';
 import {
   currentProject,
+  fetchProject,
   updateProject,
   fetchProjectMembers,
 } from '@/stores/project.store';
@@ -78,8 +79,12 @@ export function SettingsPage() {
   const [aiSettingsSaving, setAiSettingsSaving] = createSignal(false);
 
   const loadAiSettings = async () => {
-    const proj = currentProject();
-    if (!proj) return;
+    let proj = currentProject();
+    if (!proj && params.projectKey) {
+      await fetchProject(params.projectKey);
+      proj = currentProject();
+    }
+    if (!proj?.id) return;
     try {
       const res = await importsApi.getAiSettings(proj.id);
       const data = res.data as AiImportSettings;
@@ -95,8 +100,15 @@ export function SettingsPage() {
   };
 
   const handleSaveAiSettings = async () => {
-    const proj = currentProject();
-    if (!proj) return;
+    let proj = currentProject();
+    if (!proj && params.projectKey) {
+      await fetchProject(params.projectKey);
+      proj = currentProject();
+    }
+    if (!proj?.id) {
+      toast.addToast('Project details not loaded yet. Please refresh the page.', 'error');
+      return;
+    }
     setAiSettingsSaving(true);
     try {
       const payload: AiImportSettings & { keep_existing_key?: boolean } = {
@@ -109,11 +121,12 @@ export function SettingsPage() {
         api_key: aiApiKey().trim() || undefined,
       };
       await importsApi.updateAiSettings(proj.id, payload);
-      toast.addToast('AI import settings saved', 'success');
+      toast.addToast('AI import settings saved successfully', 'success');
       setAiApiKey('');
       await loadAiSettings();
-    } catch {
-      toast.addToast('Failed to save AI import settings', 'error');
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      toast.addToast(axiosErr?.response?.data?.error || 'Failed to save AI import settings', 'error');
     } finally {
       setAiSettingsSaving(false);
     }
@@ -162,9 +175,19 @@ export function SettingsPage() {
     }
   };
 
-  onMount(() => {
+  onMount(async () => {
+    if (params.projectKey && (!currentProject() || currentProject()?.key !== params.projectKey)) {
+      await fetchProject(params.projectKey);
+    }
     loadMembers();
     loadAllUsers();
+    loadAiSettings();
+  });
+
+  createEffect(async () => {
+    if (params.projectKey && (!currentProject() || currentProject()?.key !== params.projectKey)) {
+      await fetchProject(params.projectKey);
+    }
   });
 
   createEffect(() => {
@@ -356,7 +379,7 @@ export function SettingsPage() {
             }`}
           >
             <Settings class="w-4 h-4" />
-            <span>General & GitHub</span>
+            <span>General</span>
           </button>
           <button
             type="button"
@@ -372,7 +395,10 @@ export function SettingsPage() {
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab('ai_import')}
+            onClick={() => {
+              setActiveTab('ai_import');
+              loadAiSettings();
+            }}
             class={`flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
               activeTab() === 'ai_import'
                 ? 'bg-white text-purple-600 shadow-xs'
@@ -780,6 +806,7 @@ export function SettingsPage() {
             <Button
               variant="primary"
               size="sm"
+              type="button"
               loading={aiSettingsSaving()}
               onClick={handleSaveAiSettings}
               class="flex items-center gap-1.5 shadow-sm"
@@ -910,6 +937,21 @@ export function SettingsPage() {
                 value={aiHint()}
                 onInput={(e) => setAiHint(e.currentTarget.value)}
               />
+            </div>
+
+            {/* Bottom Save Button */}
+            <div class="flex items-center justify-end pt-3 border-t border-slate-100">
+              <Button
+                variant="primary"
+                size="sm"
+                type="button"
+                loading={aiSettingsSaving()}
+                onClick={handleSaveAiSettings}
+                class="flex items-center gap-1.5 shadow-sm"
+              >
+                <Save class="w-4 h-4" />
+                <span>Save Settings</span>
+              </Button>
             </div>
           </div>
         </div>
