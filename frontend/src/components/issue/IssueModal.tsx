@@ -49,14 +49,14 @@ interface IssueModalProps {
   onUpdated?: (issue: Issue) => void;
 }
 
-const statusOptions: RichSelectOption[] = [
+const getStatusOptions = (): RichSelectOption[] => [
   { value: 'todo', label: 'To Do', color: '#94a3b8', badge: 'OPEN' },
   { value: 'in_progress', label: 'In Progress', color: '#3b82f6', badge: 'IN PROGRESS' },
   { value: 'in_review', label: 'In Review', color: '#8b5cf6', badge: 'IN REVIEW' },
   { value: 'done', label: 'Done', color: '#22c55e', badge: 'RESOLVED' },
 ];
 
-const priorityOptions: RichSelectOption[] = [
+const getPriorityOptions = (): RichSelectOption[] => [
   {
     value: 'highest',
     label: 'Highest',
@@ -617,7 +617,7 @@ export function IssueModal(props: IssueModalProps) {
                 <p class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Status</p>
                 <RichSelect
                   value={localIssue().status}
-                  options={statusOptions}
+                  options={getStatusOptions()}
                   onChange={(val) => handleFieldUpdate('status', val as IssueStatus)}
                   fullWidth
                   size="sm"
@@ -629,7 +629,7 @@ export function IssueModal(props: IssueModalProps) {
                 <p class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">Priority</p>
                 <RichSelect
                   value={localIssue().priority}
-                  options={priorityOptions}
+                  options={getPriorityOptions()}
                   onChange={(val) => handleFieldUpdate('priority', val as IssuePriority)}
                   fullWidth
                   size="sm"
