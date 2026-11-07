@@ -13,6 +13,8 @@ frontend/.vite/
 showcase/node_modules/
 showcase/dist/
 showcase/.vite/
+showcase/.pnpm-store/
+.pnpm-store/
 
 # Backend
 backend/log/*.log

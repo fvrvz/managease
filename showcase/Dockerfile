@@ -7,7 +7,7 @@ WORKDIR /app
 # ── Stage 2: Dependencies ─────────────────────────────────────────────────────
 FROM base AS deps
 
-COPY package.json .npmrc* ./
+COPY package.json pnpm-lock.yaml* .npmrc* ./
 RUN pnpm install --no-frozen-lockfile
 
 # ── Stage 3: Development ──────────────────────────────────────────────────────
