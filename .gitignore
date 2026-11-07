@@ -9,6 +9,11 @@ frontend/node_modules/
 frontend/dist/
 frontend/.vite/
 
+# Showcase
+showcase/node_modules/
+showcase/dist/
+showcase/.vite/
+
 # Backend
 backend/log/*.log
 backend/tmp/
