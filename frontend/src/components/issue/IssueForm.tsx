@@ -44,7 +44,7 @@ interface IssueFormProps {
   onSaved?: (issue: Issue) => void;
 }
 
-const typeOptions: RichSelectOption[] = [
+const getTypeOptions = (): RichSelectOption[] => [
   {
     value: 'task',
     label: 'Task',
@@ -71,7 +71,7 @@ const typeOptions: RichSelectOption[] = [
   },
 ];
 
-const priorityOptions: RichSelectOption[] = [
+const getPriorityOptions = (): RichSelectOption[] => [
   {
     value: 'highest',
     label: 'Highest',
@@ -104,7 +104,7 @@ const priorityOptions: RichSelectOption[] = [
   },
 ];
 
-const statusOptions: RichSelectOption[] = [
+const getStatusOptions = (): RichSelectOption[] => [
   { value: 'todo', label: 'To Do', color: '#94a3b8', badge: 'OPEN' },
   { value: 'in_progress', label: 'In Progress', color: '#3b82f6', badge: 'DEV' },
   { value: 'in_review', label: 'In Review', color: '#8b5cf6', badge: 'QA' },
@@ -299,14 +299,14 @@ export function IssueForm(props: IssueFormProps) {
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <RichSelect
             label="Issue Type"
-            options={typeOptions}
+            options={getTypeOptions()}
             value={type()}
             onChange={(val) => setType(val as IssueType)}
             fullWidth
           />
           <RichSelect
             label="Priority"
-            options={priorityOptions}
+            options={getPriorityOptions()}
             value={priority()}
             onChange={(val) => setPriority(val as IssuePriority)}
             fullWidth
@@ -317,7 +317,7 @@ export function IssueForm(props: IssueFormProps) {
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <RichSelect
             label="Status"
-            options={statusOptions}
+            options={getStatusOptions()}
             value={status()}
             onChange={(val) => setStatus(val as IssueStatus)}
             fullWidth

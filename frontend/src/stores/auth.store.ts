@@ -1,4 +1,4 @@
-import { createSignal, createMemo } from 'solid-js';
+import { createSignal } from 'solid-js';
 import { authApi } from '@/api/endpoints';
 import { setToken, clearToken } from '@/api/client';
 import type { User } from '@/types';
@@ -40,7 +40,7 @@ const [loading, setLoading] = createSignal(false);
 const [error, setError] = createSignal<string | null>(null);
 
 // ── Computed ──────────────────────────────────
-export const isAuthenticated = createMemo(() => user() !== null);
+export const isAuthenticated = () => user() !== null;
 
 // ── Exported accessors ────────────────────────
 export { user, loading as authLoading, error as authError };

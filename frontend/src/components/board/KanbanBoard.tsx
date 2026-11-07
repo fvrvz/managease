@@ -33,7 +33,7 @@ const DEFAULT_COLUMNS: { id: IssueStatus; title: string; color: string }[] = [
   { id: 'done', title: 'Done', color: '#22c55e' },
 ];
 
-const priorityFilterOptions: RichSelectOption[] = [
+const getPriorityFilterOptions = (): RichSelectOption[] => [
   { value: '', label: 'All Priorities' },
   {
     value: 'highest',
@@ -190,7 +190,7 @@ export function KanbanBoard(props: KanbanBoardProps) {
         <div class="w-40">
           <RichSelect
             size="sm"
-            options={priorityFilterOptions}
+            options={getPriorityFilterOptions()}
             value={filterPriority()}
             onChange={setFilterPriority}
           />
