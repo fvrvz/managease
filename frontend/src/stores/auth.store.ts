@@ -3,10 +3,20 @@ import { authApi } from '@/api/endpoints';
 import { setToken, clearToken } from '@/api/client';
 import type { User } from '@/types';
 
-// ── Persisted state helpers ───────────────────
+// ── Persisted state helpers (using sessionStorage for security) ──
 const loadUser = (): User | null => {
+  if (typeof window === 'undefined') return null;
   try {
-    const raw = localStorage.getItem('user');
+    let raw = window.sessionStorage.getItem('user');
+    if (!raw) {
+      // Migration: check legacy localStorage once, move to sessionStorage, and delete from localStorage
+      const legacyRaw = window.localStorage.getItem('user');
+      if (legacyRaw) {
+        window.sessionStorage.setItem('user', legacyRaw);
+        window.localStorage.removeItem('user');
+        raw = legacyRaw;
+      }
+    }
     return raw ? (JSON.parse(raw) as User) : null;
   } catch {
     return null;
@@ -14,8 +24,14 @@ const loadUser = (): User | null => {
 };
 
 const persistUser = (user: User | null): void => {
-  if (user) localStorage.setItem('user', JSON.stringify(user));
-  else localStorage.removeItem('user');
+  if (typeof window === 'undefined') return;
+  if (user) {
+    window.sessionStorage.setItem('user', JSON.stringify(user));
+    window.localStorage.removeItem('user');
+  } else {
+    window.sessionStorage.removeItem('user');
+    window.localStorage.removeItem('user');
+  }
 };
 
 // ── Signals ───────────────────────────────────

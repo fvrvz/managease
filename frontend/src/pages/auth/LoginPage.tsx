@@ -1,12 +1,24 @@
-import { createSignal, Show } from 'solid-js';
+import { createSignal, Show, onMount } from 'solid-js';
 import { A, useNavigate } from '@solidjs/router';
 import { login, authLoading, authError } from '@/stores/auth.store';
 import { ShieldCheck, LogIn, KeyRound } from 'lucide-solid';
+import { loginWithOidc } from '@/services/oidc.service';
+import { getRuntimeConfig } from '@/config/runtimeConfig';
 
 export function LoginPage() {
   const navigate = useNavigate();
   const [email, setEmail] = createSignal('admin@managease.local');
   const [password, setPassword] = createSignal('password123');
+  const [oidcLoading, setOidcLoading] = createSignal(false);
+  const [ssoError, setSsoError] = createSignal<string | null>(null);
+
+  onMount(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const err = urlParams.get('error');
+    if (err) {
+      setSsoError(`SSO Error: ${decodeURIComponent(err)}`);
+    }
+  });
 
   const handleSubmit = async (e: Event) => {
     e.preventDefault();
@@ -18,9 +30,24 @@ export function LoginPage() {
     }
   };
 
-  const handleOidcLogin = () => {
-    // Redirects to backend OIDC OAuth endpoint
-    const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+  const handleOidcLogin = async () => {
+    setSsoError(null);
+    const config = getRuntimeConfig();
+
+    if (config.oidc.enabled && config.oidc.authority && config.oidc.clientId) {
+      try {
+        setOidcLoading(true);
+        await loginWithOidc();
+      } catch (err: unknown) {
+        setOidcLoading(false);
+        const msg = err instanceof Error ? err.message : 'Failed to initiate OIDC sign-in.';
+        setSsoError(msg);
+      }
+      return;
+    }
+
+    // Fallback: If backend OIDC endpoint is configured
+    const backendUrl = config.apiBaseUrl || 'http://localhost:3000';
     window.location.href = `${backendUrl}/auth/oidc/callback`;
   };
 
@@ -91,14 +118,24 @@ export function LoginPage() {
           <div class="h-px bg-slate-200 flex-1" />
         </div>
 
+        {/* SSO Error */}
+        <Show when={ssoError()}>
+          <div class="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-600 text-xs">
+            {ssoError()}
+          </div>
+        </Show>
+
         {/* SSO Button */}
         <button
           type="button"
           onClick={handleOidcLogin}
-          class="w-full py-2.5 px-4 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-300 text-slate-700 font-medium text-sm transition flex items-center justify-center gap-2"
+          disabled={oidcLoading()}
+          class="w-full py-2.5 px-4 rounded-lg bg-slate-50 hover:bg-slate-100 disabled:opacity-60 border border-slate-300 text-slate-700 font-medium text-sm transition flex items-center justify-center gap-2"
         >
-          <ShieldCheck class="w-4 h-4 text-blue-600" />
-          <span>Sign in with Enterprise SSO (OIDC)</span>
+          <Show when={oidcLoading()} fallback={<ShieldCheck class="w-4 h-4 text-blue-600" />}>
+            <div class="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+          </Show>
+          <span>{oidcLoading() ? 'Redirecting to SSO...' : 'Sign in with Enterprise SSO (OIDC)'}</span>
         </button>
 
         {/* Quick Demo Credentials */}
