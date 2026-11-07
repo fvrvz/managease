@@ -25,6 +25,12 @@ class Project < ApplicationRecord
   # ── Enums ─────────────────────────────────────────────────────────────────────
   enum :status, { active: 0, archived: 1 }, default: :active
 
+  # ── AI Import settings ─────────────────────────────────────────────────────────
+  # Stored as JSONB: { provider, api_key, model, base_url, enabled, hint }
+  def ai_import_enabled?
+    (ai_import_settings || {}).with_indifferent_access[:enabled] == true
+  end
+
   # ── Scopes ────────────────────────────────────────────────────────────────────
   scope :active, -> { where(status: :active) }
   scope :archived, -> { where(status: :archived) }

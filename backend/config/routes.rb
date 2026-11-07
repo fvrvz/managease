@@ -69,7 +69,17 @@ Rails.application.routes.draw do
             get :time_tracking
           end
         end
-        resources :imports, only: [:create]
+        resources :imports, only: [:create] do
+          collection do
+            post  :ai_analyze
+            post  :ai_commit
+            get   :ai_settings
+            put   :ai_settings, to: 'imports#update_ai_settings'
+            patch :ai_settings, to: 'imports#update_ai_settings'
+            get   :ai_models
+            post  :ai_models
+          end
+        end
       end
 
       # Users management for managers & leads
