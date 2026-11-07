@@ -5,7 +5,6 @@ import {
   GitBranch,
   Copy,
   Check,
-  ExternalLink,
   Bot,
   Key,
   ShieldCheck,
@@ -16,17 +15,14 @@ import {
   Trash2,
   Shield,
   UserCheck,
-  Mail,
-  Lock,
+  Sparkles,
 } from 'lucide-solid';
 import {
   currentProject,
   updateProject,
-  projectMembers,
   fetchProjectMembers,
 } from '@/stores/project.store';
-import { user as currentUser } from '@/stores/auth.store';
-import { projectsApi, usersApi } from '@/api/endpoints';
+import { projectsApi, usersApi, importsApi, type AiImportSettings } from '@/api/endpoints';
 import { useToast } from '@/components/ui/Toast';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -44,7 +40,7 @@ export function SettingsPage() {
   const params = useParams();
   const toast = useToast();
 
-  const [activeTab, setActiveTab] = createSignal<'general' | 'team'>('general');
+  const [activeTab, setActiveTab] = createSignal<'general' | 'team' | 'ai_import'>('general');
 
   // General settings state
   const [name, setName] = createSignal('');
@@ -70,6 +66,58 @@ export function SettingsPage() {
   const [newUserPassword, setNewUserPassword] = createSignal('');
   const [newUserRole, setNewUserRole] = createSignal('member');
   const [creatingUser, setCreatingUser] = createSignal(false);
+
+  // AI Import settings state
+  const [aiProvider, setAiProvider] = createSignal<'openai' | 'gemini' | 'ollama'>('openai');
+  const [aiApiKey, setAiApiKey] = createSignal('');
+  const [aiHasKey, setAiHasKey] = createSignal(false);
+  const [aiModel, setAiModel] = createSignal('');
+  const [aiBaseUrl, setAiBaseUrl] = createSignal('http://localhost:11434');
+  const [aiHint, setAiHint] = createSignal('');
+  const [aiEnabled, setAiEnabled] = createSignal(false);
+  const [aiSettingsSaving, setAiSettingsSaving] = createSignal(false);
+
+  const loadAiSettings = async () => {
+    const proj = currentProject();
+    if (!proj) return;
+    try {
+      const res = await importsApi.getAiSettings(proj.id);
+      const data = res.data as AiImportSettings;
+      setAiEnabled(data.enabled ?? false);
+      setAiProvider((data.provider as 'openai' | 'gemini' | 'ollama') ?? 'openai');
+      setAiModel(data.model ?? '');
+      setAiBaseUrl(data.base_url ?? 'http://localhost:11434');
+      setAiHint(data.hint ?? '');
+      setAiHasKey((data as unknown as Record<string, unknown>).has_key === true);
+    } catch {
+      // AI settings not configured yet — keep defaults
+    }
+  };
+
+  const handleSaveAiSettings = async () => {
+    const proj = currentProject();
+    if (!proj) return;
+    setAiSettingsSaving(true);
+    try {
+      const payload: AiImportSettings & { keep_existing_key?: boolean } = {
+        enabled: aiEnabled(),
+        provider: aiProvider(),
+        model: aiModel().trim() || undefined,
+        base_url: aiProvider() === 'ollama' ? aiBaseUrl().trim() : undefined,
+        hint: aiHint().trim() || undefined,
+        keep_existing_key: aiApiKey().trim() === '',
+        api_key: aiApiKey().trim() || undefined,
+      };
+      await importsApi.updateAiSettings(proj.id, payload);
+      toast.addToast('AI import settings saved', 'success');
+      setAiApiKey('');
+      await loadAiSettings();
+    } catch {
+      toast.addToast('Failed to save AI import settings', 'error');
+    } finally {
+      setAiSettingsSaving(false);
+    }
+  };
 
   const loadMembers = async () => {
     const proj = currentProject();
@@ -127,6 +175,7 @@ export function SettingsPage() {
       setGithubRepo(proj.githubRepo || '');
       setWebhookSecret(proj.githubWebhookSecret || '');
       loadMembers();
+      loadAiSettings();
     }
   });
 
@@ -320,6 +369,18 @@ export function SettingsPage() {
           >
             <Users class="w-4 h-4" />
             <span>Team & User Management</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('ai_import')}
+            class={`flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
+              activeTab() === 'ai_import'
+                ? 'bg-white text-purple-600 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Sparkles class="w-4 h-4" />
+            <span>AI Import</span>
           </button>
         </div>
       </div>
@@ -706,6 +767,149 @@ export function SettingsPage() {
                   </For>
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      </Show>
+
+      {/* ── TAB 3: AI Import Settings ── */}
+      <Show when={activeTab() === 'ai_import'}>
+        <div class="space-y-6">
+          <div class="flex items-center justify-between">
+            <h2 class="text-sm font-bold text-slate-900">AI Import Configuration</h2>
+            <Button
+              variant="primary"
+              size="sm"
+              loading={aiSettingsSaving()}
+              onClick={handleSaveAiSettings}
+              class="flex items-center gap-1.5 shadow-sm"
+            >
+              <Save class="w-4 h-4" />
+              <span>Save Settings</span>
+            </Button>
+          </div>
+
+          <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5">
+            <div class="flex items-start gap-3">
+              <div class="p-2.5 rounded-xl bg-purple-600 text-white shrink-0 shadow-sm">
+                <Sparkles class="w-6 h-6" />
+              </div>
+              <div>
+                <h3 class="font-bold text-slate-900 text-base">LLM-Powered Excel Import</h3>
+                <p class="text-xs text-slate-500 mt-1">
+                  When enabled, the import page offers an "AI Smart Import" mode that uses a large language model to
+                  interpret any arbitrary Excel structure into ManagEase epics, sprints, and issues — no fixed template required.
+                </p>
+              </div>
+            </div>
+
+            {/* Enable toggle */}
+            <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200">
+              <div>
+                <p class="text-sm font-semibold text-slate-800">Enable AI Smart Import</p>
+                <p class="text-xs text-slate-500 mt-0.5">Shows the AI Import mode toggle on the Import page</p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={aiEnabled()}
+                onClick={() => setAiEnabled(!aiEnabled())}
+                class={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                  aiEnabled() ? 'bg-purple-600' : 'bg-slate-300'
+                }`}
+              >
+                <span
+                  class={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                    aiEnabled() ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* Provider */}
+            <div class="space-y-1">
+              <label class="block text-xs font-semibold text-slate-700">LLM Provider</label>
+              <select
+                class="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-purple-500 bg-white"
+                value={aiProvider()}
+                onChange={(e) => setAiProvider(e.currentTarget.value as 'openai' | 'gemini' | 'ollama')}
+              >
+                <option value="openai">OpenAI (GPT-4o, GPT-4-turbo, etc.)</option>
+                <option value="gemini">Google Gemini</option>
+                <option value="ollama">Ollama (Local / Self-hosted)</option>
+              </select>
+            </div>
+
+            {/* API Key */}
+            <Show when={aiProvider() !== 'ollama'}>
+              <div class="space-y-1">
+                <label class="block text-xs font-semibold text-slate-700">
+                  API Key
+                  <Show when={aiHasKey()}>
+                    <span class="ml-2 text-emerald-600 font-normal">(key saved — leave blank to keep)</span>
+                  </Show>
+                </label>
+                <input
+                  type="password"
+                  class="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-purple-500"
+                  placeholder={aiHasKey() ? 'Leave blank to keep existing key' : 'sk-... or AIza...'}
+                  value={aiApiKey()}
+                  onInput={(e) => setAiApiKey(e.currentTarget.value)}
+                />
+              </div>
+            </Show>
+
+            {/* Model (optional) */}
+            <div class="space-y-1">
+              <label class="block text-xs font-semibold text-slate-700">
+                Model
+                <span class="ml-1 text-slate-400 font-normal">
+                  (optional — defaults to{' '}
+                  {aiProvider() === 'openai' ? 'gpt-4o-mini' : aiProvider() === 'gemini' ? 'gemini-1.5-flash' : 'llama3'})
+                </span>
+              </label>
+              <input
+                type="text"
+                class="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-purple-500"
+                placeholder={
+                  aiProvider() === 'openai'
+                    ? 'e.g. gpt-4o, gpt-4-turbo'
+                    : aiProvider() === 'gemini'
+                    ? 'e.g. gemini-1.5-pro'
+                    : 'e.g. llama3, mistral'
+                }
+                value={aiModel()}
+                onInput={(e) => setAiModel(e.currentTarget.value)}
+              />
+            </div>
+
+            {/* Ollama Base URL */}
+            <Show when={aiProvider() === 'ollama'}>
+              <div class="space-y-1">
+                <label class="block text-xs font-semibold text-slate-700">Ollama Base URL</label>
+                <input
+                  type="text"
+                  class="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-purple-500"
+                  placeholder="http://localhost:11434"
+                  value={aiBaseUrl()}
+                  onInput={(e) => setAiBaseUrl(e.currentTarget.value)}
+                />
+                <p class="text-[11px] text-slate-400">The base URL of your Ollama instance (must be reachable from the backend container)</p>
+              </div>
+            </Show>
+
+            {/* Hint text */}
+            <div class="space-y-1">
+              <label class="block text-xs font-semibold text-slate-700">
+                Import Hint
+                <span class="ml-1 text-slate-400 font-normal">(optional — helps the LLM understand your spreadsheet conventions)</span>
+              </label>
+              <textarea
+                class="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-purple-500 min-h-[80px]"
+                placeholder={`e.g. "In our sheets, 'Category' maps to Epics, sprint names follow 'Release X.Y', and 'Owner' is the assignee."`}
+                value={aiHint()}
+                onInput={(e) => setAiHint(e.currentTarget.value)}
+              />
             </div>
           </div>
         </div>
