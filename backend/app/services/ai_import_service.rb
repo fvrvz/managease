@@ -443,8 +443,8 @@ class AiImportService
 
   # ── Gemini ────────────────────────────────────────────────────────────────
 
-  def call_gemini(user_message)
-    clean_model = (settings[:model].presence || 'gemini-1.5-flash').to_s.strip.sub(%r{\Amodels/}, '')
+  def call_gemini(user_message, model_override: nil)
+    clean_model = (model_override || settings[:model].presence || 'gemini-1.5-flash').to_s.strip.sub(%r{\Amodels/}, '')
     api_key     = settings[:api_key]
     uri         = URI("https://generativelanguage.googleapis.com/v1beta/models/#{clean_model}:generateContent?key=#{api_key}")
 
@@ -462,7 +462,19 @@ class AiImportService
       }
     }
 
-    response = post_json(uri, body, { 'Content-Type' => 'application/json' })
+    begin
+      response = post_json(uri, body, { 'Content-Type' => 'application/json' })
+    rescue LlmError => e
+      # If experimental/preview model (e.g. gemini-3.8-flash) hit the 20-requests/day Free Tier quota,
+      # automatically fall back to gemini-1.5-flash (which offers 1,500 requests/day).
+      if clean_model != 'gemini-1.5-flash' && e.message.include?('Quota exceeded')
+        Rails.logger.warn "Gemini model #{clean_model} hit daily quota. Falling back to gemini-1.5-flash..."
+        return call_gemini(user_message, model_override: 'gemini-1.5-flash')
+      end
+
+      raise e
+    end
+
     data = JSON.parse(response)
 
     usage = data['usageMetadata'] || {}
@@ -471,7 +483,7 @@ class AiImportService
     tt = usage['totalTokenCount'].to_i
     @last_usage = {
       provider: 'gemini',
-      model: clean_model,
+      model: model_override ? "#{clean_model} (auto-fallback)" : clean_model,
       prompt_tokens: pt,
       completion_tokens: ct,
       total_tokens: tt,
