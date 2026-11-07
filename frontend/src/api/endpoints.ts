@@ -267,6 +267,23 @@ export interface AiImportPreviewSprint {
   end_date?: string | null;
 }
 
+export interface AiModelInfo {
+  id: string;
+  name: string;
+  description?: string;
+  input_token_limit?: number;
+  output_token_limit?: number;
+}
+
+export interface AiUsageInfo {
+  provider: string;
+  model: string;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  estimated_cost_usd: number;
+}
+
 export interface AiImportPreview {
   summary: {
     epics_count: number;
@@ -289,11 +306,11 @@ export const importsApi = {
     });
   },
 
-  // Phase 1 — LLM analysis: returns structured preview
+  // Phase 1 — LLM analysis: returns structured preview and token/cost usage
   aiAnalyze: (projectId: string, file: File) => {
     const form = new FormData();
     form.append('file', file);
-    return apiClient.post<{ success: boolean; preview: AiImportPreview }>(
+    return apiClient.post<{ success: boolean; preview: AiImportPreview; usage?: AiUsageInfo }>(
       `/api/v1/projects/${projectId}/imports/ai_analyze`,
       form,
       { headers: { 'Content-Type': 'multipart/form-data' } }
@@ -312,4 +329,7 @@ export const importsApi = {
 
   updateAiSettings: (projectId: string, settings: Partial<AiImportSettings> & { api_key?: string; keep_existing_key?: boolean }) =>
     apiClient.put(`/api/v1/projects/${projectId}/imports/ai_settings`, settings),
+
+  getAiModels: (projectId: string, params?: { provider?: string; api_key?: string; base_url?: string }) =>
+    apiClient.post<{ models: AiModelInfo[] }>(`/api/v1/projects/${projectId}/imports/ai_models`, params || {}),
 };

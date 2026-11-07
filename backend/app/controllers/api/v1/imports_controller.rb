@@ -116,6 +116,33 @@ module Api
         render json: { error: e.message }, status: :unprocessable_entity
       end
 
+      # GET /api/v1/projects/:project_id/imports/ai_models
+      # POST /api/v1/projects/:project_id/imports/ai_models
+      # Fetches available models for the configured or provided provider & API key
+      def ai_models
+        raw = (@project.ai_import_settings || {}).with_indifferent_access
+        provider = params[:provider].presence || raw[:provider] || 'gemini'
+        api_key  = params[:api_key].presence || raw[:api_key]
+        base_url = params[:base_url].presence || raw[:base_url]
+
+        if provider.to_s.in?(%w[openai gemini]) && api_key.blank?
+          render json: { error: "API key is required to list #{provider.capitalize} models" }, status: :unprocessable_entity
+          return
+        end
+
+        models = AiImportService.fetch_available_models(
+          provider: provider,
+          api_key:  api_key,
+          base_url: base_url
+        )
+
+        render json: { models: models }
+      rescue AiImportService::LlmError => e
+        render json: { error: e.message }, status: :unprocessable_entity
+      rescue StandardError => e
+        render json: { error: "Failed to fetch models: #{e.message}" }, status: :internal_server_error
+      end
+
       private
 
       def set_project

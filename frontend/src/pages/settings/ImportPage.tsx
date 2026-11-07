@@ -18,7 +18,7 @@ import {
   RefreshCw,
 } from 'lucide-solid';
 import { currentProject, fetchProject, fetchIssues, fetchSprints, fetchEpics } from '@/stores/project.store';
-import { importsApi, type AiImportPreview } from '@/api/endpoints';
+import { importsApi, type AiImportPreview, type AiUsageInfo } from '@/api/endpoints';
 import { useToast } from '@/components/ui/Toast';
 import type { Project } from '@/types';
 
@@ -43,6 +43,7 @@ export function ImportPage() {
   // ── AI import state ───────────────────────────────────────────────────────
   const [aiStep, setAiStep] = createSignal<AiStep>('upload');
   const [aiPreview, setAiPreview] = createSignal<AiImportPreview | null>(null);
+  const [aiUsage, setAiUsage] = createSignal<AiUsageInfo | null>(null);
   const [aiEnabled, setAiEnabled] = createSignal(false);
   const [expandedSections, setExpandedSections] = createSignal<Record<string, boolean>>({
     epics: true, sprints: true, issues: false,
@@ -88,6 +89,7 @@ export function ImportPage() {
     setSelectedFile(file);
     setImportResult(null);
     setAiPreview(null);
+    setAiUsage(null);
     setAiStep('upload');
 
     const reader = new FileReader();
@@ -150,6 +152,7 @@ export function ImportPage() {
     try {
       const res = await importsApi.aiAnalyze(proj.id, file);
       setAiPreview(res.data.preview);
+      setAiUsage(res.data.usage || null);
       setAiStep('preview');
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } } };
@@ -448,7 +451,21 @@ export function ImportPage() {
                 <div class="space-y-5">
                   {/* Summary banner */}
                   <div class="bg-violet-50 border border-violet-200 rounded-xl px-5 py-4">
-                    <div class="text-sm font-bold text-violet-900 mb-1">AI Analysis Complete</div>
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-1">
+                      <div class="text-sm font-bold text-violet-900">AI Analysis Complete</div>
+                      <Show when={aiUsage()}>
+                        {(u) => (
+                          <div class="flex items-center gap-2 text-[11px] bg-white/90 border border-violet-200 rounded-lg px-2.5 py-1 text-violet-900 font-medium shadow-xs">
+                            <span>
+                              {u().model} &middot; {u().total_tokens.toLocaleString()} tokens ({u().prompt_tokens.toLocaleString()} in / {u().completion_tokens.toLocaleString()} out)
+                            </span>
+                            <span class="text-emerald-700 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                              {u().estimated_cost_usd === 0 ? 'Free tier / Local' : `~$${u().estimated_cost_usd.toFixed(5)}`}
+                            </span>
+                          </div>
+                        )}
+                      </Show>
+                    </div>
                     <div class="text-xs text-violet-700 mb-3">{p.summary.notes}</div>
                     <div class="flex gap-6 text-xs font-semibold text-slate-700">
                       <span class="flex items-center gap-1.5"><Layers class="w-3.5 h-3.5 text-violet-500" /> {p.summary.epics_count} Epics</span>

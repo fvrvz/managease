@@ -16,6 +16,7 @@ import {
   Shield,
   UserCheck,
   Sparkles,
+  RefreshCw,
 } from 'lucide-solid';
 import {
   currentProject,
@@ -23,7 +24,7 @@ import {
   updateProject,
   fetchProjectMembers,
 } from '@/stores/project.store';
-import { projectsApi, usersApi, importsApi, type AiImportSettings } from '@/api/endpoints';
+import { projectsApi, usersApi, importsApi, type AiImportSettings, type AiModelInfo } from '@/api/endpoints';
 import { useToast } from '@/components/ui/Toast';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -77,6 +78,46 @@ export function SettingsPage() {
   const [aiHint, setAiHint] = createSignal('');
   const [aiEnabled, setAiEnabled] = createSignal(false);
   const [aiSettingsSaving, setAiSettingsSaving] = createSignal(false);
+  const [availableModels, setAvailableModels] = createSignal<AiModelInfo[]>([]);
+  const [loadingModels, setLoadingModels] = createSignal(false);
+
+  const handleFetchModels = async () => {
+    let proj = currentProject();
+    if (!proj && params.projectKey) {
+      await fetchProject(params.projectKey);
+      proj = currentProject();
+    }
+    if (!proj?.id) return;
+
+    if (aiProvider() !== 'ollama' && !aiHasKey() && !aiApiKey().trim()) {
+      toast.addToast('Please enter an API key first to list models', 'warning');
+      return;
+    }
+
+    setLoadingModels(true);
+    try {
+      const res = await importsApi.getAiModels(proj.id, {
+        provider: aiProvider(),
+        api_key: aiApiKey().trim() || undefined,
+        base_url: aiProvider() === 'ollama' ? aiBaseUrl().trim() : undefined,
+      });
+      const list = res.data.models || [];
+      setAvailableModels(list);
+      if (list.length > 0) {
+        toast.addToast(`Found ${list.length} available models for ${aiProvider()}`, 'success');
+        if (!aiModel() && list[0]?.id) {
+          setAiModel(list[0].id);
+        }
+      } else {
+        toast.addToast('No models returned for this account', 'warning');
+      }
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      toast.addToast(axiosErr?.response?.data?.error || 'Failed to fetch models', 'error');
+    } finally {
+      setLoadingModels(false);
+    }
+  };
 
   const loadAiSettings = async () => {
     let proj = currentProject();
@@ -886,28 +927,70 @@ export function SettingsPage() {
               </div>
             </Show>
 
-            {/* Model (optional) */}
-            <div class="space-y-1">
-              <label class="block text-xs font-semibold text-slate-700">
-                Model
-                <span class="ml-1 text-slate-400 font-normal">
-                  (optional — defaults to{' '}
-                  {aiProvider() === 'openai' ? 'gpt-4o-mini' : aiProvider() === 'gemini' ? 'gemini-1.5-flash' : 'llama3'})
-                </span>
-              </label>
-              <input
-                type="text"
-                class="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-purple-500"
-                placeholder={
-                  aiProvider() === 'openai'
-                    ? 'e.g. gpt-4o, gpt-4-turbo'
-                    : aiProvider() === 'gemini'
-                    ? 'e.g. gemini-1.5-pro'
-                    : 'e.g. llama3, mistral'
+            {/* Model & Discovery */}
+            <div class="space-y-1.5">
+              <div class="flex items-center justify-between">
+                <label class="block text-xs font-semibold text-slate-700">
+                  Model
+                  <span class="ml-1 text-slate-400 font-normal">
+                    (defaults to{' '}
+                    {aiProvider() === 'openai' ? 'gpt-4o-mini' : aiProvider() === 'gemini' ? 'gemini-1.5-flash' : 'llama3'})
+                  </span>
+                </label>
+                <button
+                  type="button"
+                  onClick={handleFetchModels}
+                  disabled={loadingModels()}
+                  class="flex items-center gap-1 text-[11px] font-semibold text-purple-600 hover:text-purple-700 disabled:opacity-50 transition cursor-pointer"
+                >
+                  <RefreshCw class={`w-3 h-3 ${loadingModels() ? 'animate-spin' : ''}`} />
+                  <span>{loadingModels() ? 'Fetching models…' : 'Fetch Available Models'}</span>
+                </button>
+              </div>
+
+              <Show
+                when={availableModels().length > 0}
+                fallback={
+                  <input
+                    type="text"
+                    class="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-purple-500"
+                    placeholder={
+                      aiProvider() === 'openai'
+                        ? 'e.g. gpt-4o, gpt-4-turbo'
+                        : aiProvider() === 'gemini'
+                        ? 'e.g. gemini-1.5-flash, gemini-1.5-pro'
+                        : 'e.g. llama3, mistral'
+                    }
+                    value={aiModel()}
+                    onInput={(e) => setAiModel(e.currentTarget.value)}
+                  />
                 }
-                value={aiModel()}
-                onInput={(e) => setAiModel(e.currentTarget.value)}
-              />
+              >
+                <div class="space-y-1">
+                  <select
+                    class="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-purple-500 bg-white"
+                    value={aiModel()}
+                    onChange={(e) => setAiModel(e.currentTarget.value)}
+                  >
+                    <option value="">Default ({aiProvider() === 'openai' ? 'gpt-4o-mini' : aiProvider() === 'gemini' ? 'gemini-1.5-flash' : 'llama3'})</option>
+                    <For each={availableModels()}>
+                      {(m) => (
+                        <option value={m.id}>
+                          {m.name || m.id} {m.input_token_limit ? `(limit: ${(m.input_token_limit / 1000).toFixed(0)}k tokens)` : ''}
+                        </option>
+                      )}
+                    </For>
+                  </select>
+                  <Show when={availableModels().find((m) => m.id === aiModel())}>
+                    {(selected) => (
+                      <p class="text-[11px] text-slate-500">
+                        {selected().description}
+                        {selected().input_token_limit ? ` — Max input: ${selected().input_token_limit?.toLocaleString()} tokens` : ''}
+                      </p>
+                    )}
+                  </Show>
+                </div>
+              </Show>
             </div>
 
             {/* Ollama Base URL */}

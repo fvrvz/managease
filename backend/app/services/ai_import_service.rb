@@ -87,7 +87,7 @@ class AiImportService
     @settings     = (project.ai_import_settings || {}).with_indifferent_access
   end
 
-  # Returns { success: true, preview: <structured hash> } or raises
+  # Returns { success: true, preview: <structured hash>, usage: <hash> } or raises
   def analyze
     validate_config!
 
@@ -95,7 +95,11 @@ class AiImportService
     llm_response     = call_llm(spreadsheet_text)
     parsed           = parse_llm_response(llm_response)
 
-    { success: true, preview: parsed }
+    {
+      success: true,
+      preview: parsed,
+      usage:   @last_usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, estimated_cost_usd: 0.0 }
+    }
   end
 
   # Commits the confirmed preview payload to the database.
@@ -275,6 +279,129 @@ class AiImportService
     msg
   end
 
+  # ── Model Discovery & Token Limits ──────────────────────────────────────────
+
+  def self.fetch_available_models(provider:, api_key:, base_url: nil)
+    case provider.to_s
+    when 'gemini'
+      fetch_gemini_models(api_key)
+    when 'openai'
+      fetch_openai_models(api_key)
+    when 'ollama'
+      fetch_ollama_models(base_url)
+    else
+      raise LlmError, "Unknown provider: #{provider}"
+    end
+  end
+
+  def self.fetch_gemini_models(api_key)
+    raise LlmError, 'Gemini API key is required' if api_key.blank?
+
+    uri = URI("https://generativelanguage.googleapis.com/v1beta/models?key=#{api_key}")
+    http = Net::HTTP.new(uri.host, uri.port)
+    http.use_ssl = true
+    http.open_timeout = 10
+    http.read_timeout = 15
+
+    req = Net::HTTP::Get.new(uri.request_uri)
+    res = http.request(req)
+
+    if res.code == '400' || res.code == '403'
+      raise LlmError, "Invalid API key or access denied (HTTP #{res.code})"
+    elsif !res.is_a?(Net::HTTPSuccess)
+      raise LlmError, "Failed to list Gemini models (HTTP #{res.code}): #{res.body[0, 200]}"
+    end
+
+    data = JSON.parse(res.body)
+    raw_models = data['models'] || []
+
+    raw_models.select do |m|
+      Array(m['supportedGenerationMethods']).include?('generateContent')
+    end.map do |m|
+      id = m['name'].to_s.sub(%r{\Amodels/}, '')
+      {
+        id: id,
+        name: m['displayName'].presence || id,
+        description: m['description'].to_s.truncate(150),
+        input_token_limit: m['inputTokenLimit'],
+        output_token_limit: m['outputTokenLimit']
+      }
+    end.sort_by { |m| m[:id].include?('flash') ? 0 : 1 }
+  rescue JSON::ParserError
+    raise LlmError, 'Failed to parse Gemini models list'
+  end
+
+  def self.fetch_openai_models(api_key)
+    raise LlmError, 'OpenAI API key is required' if api_key.blank?
+
+    uri = URI('https://api.openai.com/v1/models')
+    http = Net::HTTP.new(uri.host, uri.port)
+    http.use_ssl = true
+    http.open_timeout = 10
+    http.read_timeout = 15
+
+    req = Net::HTTP::Get.new(uri.request_uri)
+    req['Authorization'] = "Bearer #{api_key}"
+    res = http.request(req)
+
+    if res.code == '401'
+      raise LlmError, 'Invalid OpenAI API key (HTTP 401)'
+    elsif !res.is_a?(Net::HTTPSuccess)
+      raise LlmError, "Failed to list OpenAI models (HTTP #{res.code}): #{res.body[0, 200]}"
+    end
+
+    data = JSON.parse(res.body)
+    raw_models = data['data'] || []
+
+    raw_models.select do |m|
+      id = m['id'].to_s
+      id.start_with?('gpt-4o', 'gpt-4-turbo', 'gpt-3.5', 'o1', 'o3')
+    end.map do |m|
+      id = m['id'].to_s
+      {
+        id: id,
+        name: id,
+        description: "OpenAI #{id}",
+        input_token_limit: id.include?('mini') ? 128_000 : 128_000,
+        output_token_limit: 16_384
+      }
+    end.sort_by { |m| m[:id] }
+  rescue JSON::ParserError
+    raise LlmError, 'Failed to parse OpenAI models list'
+  end
+
+  def self.fetch_ollama_models(base_url)
+    base = base_url.presence || 'http://localhost:11434'
+    uri = URI("#{base}/api/tags")
+    http = Net::HTTP.new(uri.host, uri.port)
+    http.open_timeout = 5
+    http.read_timeout = 10
+
+    req = Net::HTTP::Get.new(uri.request_uri)
+    res = http.request(req)
+
+    unless res.is_a?(Net::HTTPSuccess)
+      raise LlmError, "Cannot reach Ollama at #{base} (HTTP #{res.code})"
+    end
+
+    data = JSON.parse(res.body)
+    raw_models = data['models'] || []
+
+    raw_models.map do |m|
+      name = m['name'].to_s
+      size_mb = (m['size'].to_f / 1_048_576.0).round(1)
+      {
+        id: name,
+        name: name,
+        description: "Local model (#{size_mb} MB)",
+        input_token_limit: 8192,
+        output_token_limit: 4096
+      }
+    end
+  rescue StandardError => e
+    raise LlmError, "Cannot connect to Ollama at #{base}: #{e.message}"
+  end
+
   # ── OpenAI ────────────────────────────────────────────────────────────────
 
   def call_openai(user_message)
@@ -297,6 +424,19 @@ class AiImportService
     })
 
     data = JSON.parse(response)
+    usage = data['usage'] || {}
+    pt = usage['prompt_tokens'].to_i
+    ct = usage['completion_tokens'].to_i
+    tt = usage['total_tokens'].to_i
+    @last_usage = {
+      provider: 'openai',
+      model: model,
+      prompt_tokens: pt,
+      completion_tokens: ct,
+      total_tokens: tt,
+      estimated_cost_usd: estimate_cost('openai', model, pt, ct).round(6)
+    }
+
     data.dig('choices', 0, 'message', 'content') or
       raise LlmError, "Unexpected OpenAI response: #{response[0, 300]}"
   end
@@ -304,9 +444,9 @@ class AiImportService
   # ── Gemini ────────────────────────────────────────────────────────────────
 
   def call_gemini(user_message)
-    model = settings[:model].presence || 'gemini-1.5-flash'
-    api_key = settings[:api_key]
-    uri = URI("https://generativelanguage.googleapis.com/v1beta/models/#{model}:generateContent?key=#{api_key}")
+    clean_model = (settings[:model].presence || 'gemini-1.5-flash').to_s.strip.sub(%r{\Amodels/}, '')
+    api_key     = settings[:api_key]
+    uri         = URI("https://generativelanguage.googleapis.com/v1beta/models/#{clean_model}:generateContent?key=#{api_key}")
 
     body = {
       contents: [
@@ -324,6 +464,20 @@ class AiImportService
 
     response = post_json(uri, body, { 'Content-Type' => 'application/json' })
     data = JSON.parse(response)
+
+    usage = data['usageMetadata'] || {}
+    pt = usage['promptTokenCount'].to_i
+    ct = usage['candidatesTokenCount'].to_i
+    tt = usage['totalTokenCount'].to_i
+    @last_usage = {
+      provider: 'gemini',
+      model: clean_model,
+      prompt_tokens: pt,
+      completion_tokens: ct,
+      total_tokens: tt,
+      estimated_cost_usd: estimate_cost('gemini', clean_model, pt, ct).round(6)
+    }
+
     data.dig('candidates', 0, 'content', 'parts', 0, 'text') or
       raise LlmError, "Unexpected Gemini response: #{response[0, 300]}"
   end
@@ -347,8 +501,44 @@ class AiImportService
 
     response = post_json(uri, body, { 'Content-Type' => 'application/json' })
     data = JSON.parse(response)
+
+    pt = data['prompt_eval_count'].to_i
+    ct = data['eval_count'].to_i
+    tt = pt + ct
+    @last_usage = {
+      provider: 'ollama',
+      model: model,
+      prompt_tokens: pt,
+      completion_tokens: ct,
+      total_tokens: tt,
+      estimated_cost_usd: 0.0
+    }
+
     data.dig('message', 'content') or
       raise LlmError, "Unexpected Ollama response: #{response[0, 300]}"
+  end
+
+  # ── Cost Estimation ───────────────────────────────────────────────────────
+
+  def estimate_cost(provider, model, prompt_tokens, completion_tokens)
+    return 0.0 if provider.to_s == 'ollama'
+
+    case provider.to_s
+    when 'gemini'
+      if model.to_s.include?('pro')
+        (prompt_tokens * 1.25 / 1_000_000.0) + (completion_tokens * 5.00 / 1_000_000.0)
+      else
+        (prompt_tokens * 0.075 / 1_000_000.0) + (completion_tokens * 0.30 / 1_000_000.0)
+      end
+    when 'openai'
+      if model.to_s.include?('mini')
+        (prompt_tokens * 0.15 / 1_000_000.0) + (completion_tokens * 0.60 / 1_000_000.0)
+      else
+        (prompt_tokens * 2.50 / 1_000_000.0) + (completion_tokens * 10.00 / 1_000_000.0)
+      end
+    else
+      0.0
+    end
   end
 
   # ── HTTP helper ───────────────────────────────────────────────────────────
@@ -364,7 +554,20 @@ class AiImportService
     request.body = body.to_json
 
     response = http.request(request)
-    raise LlmError, "LLM request failed (HTTP #{response.code}): #{response.body[0, 400]}" unless response.is_a?(Net::HTTPSuccess)
+
+    unless response.is_a?(Net::HTTPSuccess)
+      if response.code == '429'
+        err_json = (JSON.parse(response.body) rescue {})
+        msg = err_json.dig('error', 'message') || err_json.dig('message') || response.body[0, 250]
+        raise LlmError, "Rate limit / Quota exceeded (HTTP 429): #{msg}. Note: Free-tier Gemini keys have strict per-minute limits (15 RPM). Please switch model to 'gemini-1.5-flash' or verify quota in Google AI Studio."
+      elsif response.code == '404'
+        err_json = (JSON.parse(response.body) rescue {})
+        msg = err_json.dig('error', 'message') || response.body[0, 200]
+        raise LlmError, "Model not found (HTTP 404): #{msg}. Please choose an active model via 'Fetch Available Models'."
+      else
+        raise LlmError, "LLM request failed (HTTP #{response.code}): #{response.body[0, 400]}"
+      end
+    end
 
     response.body
   rescue Net::ReadTimeout, Net::OpenTimeout => e
