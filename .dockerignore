@@ -1,0 +1,12 @@
+.git
+.gitignore
+.github
+.husky
+node_modules
+postgres_data
+.env
+.env.*
+.DS_Store
+.idea
+.vscode
+*.log
